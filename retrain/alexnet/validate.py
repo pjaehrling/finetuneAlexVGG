@@ -9,16 +9,23 @@ import os
 import fnmatch
 import numpy as np
 import tensorflow as tf
+import imageloader as imgl
 
 from alexnet import AlexNet
 from caffe_classes import class_names
 from tensorflow.contrib.data import Dataset, Iterator
 from tensorflow.python.ops import math_ops
 
-#
-# load images
-#
+
 def load_images():
+    """
+    Load images (BGR) from ./images folder
+    - Resizes/Croppes the images to 227 x 227 px
+    - Subtracts the ImageNet mean
+
+    Returns:
+        Tensorflow Dataset with the images (BGR) loaded as tensors
+    """
     print "loading images ..."
     img_dir = os.path.join('.', 'images')
     files = fnmatch.filter(os.listdir(img_dir), '*.jpeg')
@@ -26,36 +33,24 @@ def load_images():
     images = []
     for f in files:
         print "> " + f
-        img_file    = tf.read_file(os.path.join(img_dir, f))
-        img_decoded = tf.image.decode_jpeg(img_file, channels=3)
-
-        # A) cropped
-        # img_resized = tf.image.resize_image_with_crop_or_pad(img_decoded, 227, 227) 
-        # B) resized
-        input_size = tf.constant([227, 227], dtype=tf.int32)
-        img_resized = tf.image.resize_images(img_decoded, input_size)
-        
-        # A) calulates the mean for every image separately
-        # img_standardized = tf.image.per_image_standardization(img_resized) 
-        
-        # B) Subtract the imagenet mean (mean over all imagenet images)
-        imgnet_mean = tf.constant([124, 127, 104], dtype=tf.float32)
-        imgnet_mean = tf.reshape(imgnet_mean, [1, 1, 3])
-        img_cast = math_ops.cast(img_resized, dtype=tf.float32)
-        img_standardized = math_ops.subtract(img_cast, imgnet_mean)
-
-        # in this alexnet implementation the images are feed to the net in BGR format, NOT RGB
-        channels = tf.unstack(img_standardized, axis=-1)
-        img_standardized  = tf.stack([channels[2], channels[1], channels[0]], axis=-1)
-
-        images.append(img_standardized)
+        img = imgl.load_img_as_tensor(
+            os.path.join(img_dir, f),
+            input_width=227,
+            input_height=227,
+            crop=False,
+            use_mean=True,
+            bgr=True
+        )
+        images.append(img)
 
     return Dataset.from_tensors(images)
 
-#
-# validate my alexnet implementation
-#
+
 def validate():
+    """
+    Validate my alexnet implementation
+    """
+
     # load the images
     images = load_images()
 
