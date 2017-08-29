@@ -1,1 +1,2 @@
 retrain/alexnet/weights/*.npy
+*.pyc

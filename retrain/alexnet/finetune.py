@@ -24,12 +24,12 @@ INPUT_WIDTH = 227
 INPUT_HEIGHT = 227
 
 # Learning params
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.1 # [0.01, 0.1]
 NUM_EPOCHS = 2
 BATCH_SIZE = 128
 
 # Network params
-DROPOUT_RATE = 0.5
+DROPOUT_RATE = 0.2 # [0.5, 0.2]
 FINETUNE_LAYERS = ['fc8', 'fc7', 'fc6']
 
 # Tensorflow/board params
@@ -59,12 +59,8 @@ def parse_data(path, label):
 
 
 
-# def create_summary_writer(gradients, train_vars, loss, accuracy):
 def create_summary_writer(train_vars, loss, accuracy):
     """ """
-    # for gradient, var in gradients:
-    #     tf.summary.histogram(var.name + '/gradient', gradient)
-
     for var in train_vars:
         tf.summary.histogram(var.name, var)
 
@@ -74,6 +70,65 @@ def create_summary_writer(train_vars, loss, accuracy):
     writer = tf.summary.FileWriter(TENSORBOARD_PATH) # Initialize and return the FileWriter
     return merged_summary, writer
 
+
+def get_evaluation_op(scores, true_classes):
+    """Inserts the operations we need to evaluate the accuracy of our results.
+    
+    Args:
+        scores: The new final node that produces results
+        true_classes: The node we feed the true classes in
+    Returns: 
+        Evaluation operation: defining the accuracy of the model 
+    """
+    with tf.name_scope("accuracy"):
+        prediction = tf.argmax(scores, 1)
+        correct_pred = tf.equal(prediction, tf.argmax(true_classes, 1))
+        accuracy_op = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+    return accuracy_op
+
+
+def get_train_op(loss, var_list):
+    """Inserts the training operation
+    Creates an optimizer and applies gradient descent to the trainable variables
+    
+    Args: 
+        loss: the cross entropy mean (scors <> real class)
+        var_list: list of all trainable variables
+    Returns: 
+        Traning/optizing operation
+    """
+    with tf.name_scope("train"):
+        optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
+
+        # 1) Blog way
+        gradients = tf.gradients(loss, var_list) # returns a list of gradients for each trainable var = len(train_vars)
+        gradients = zip(gradients, var_list) # create a list of tuples [(g1, tv1), (g2, tv2), ...]
+        train_op = optimizer.apply_gradients(grads_and_vars=gradients)
+
+        # 2) TF retrain way
+        # train_op = optimizer.minimize(loss)
+        # --> minimize() = combines calls compute_gradients() and apply_gradients()
+        # TODO: Find out how they make sure it just trains the last n-layers
+        # This takes longer, but has the same validation accuracy??????
+    return train_op
+
+
+def get_loss_op(scores, true_classes):
+    """Inserts the operations we need to calculate the loss.
+    
+    Args:
+        scores: The new final node that produces results
+        true_classes: The node we feed the true classes in
+    Returns: loss operation 
+    """
+    # Op for calculating the loss
+    with tf.name_scope("cross_entropy"):
+        # softmax_cross_entropy_with_logits 
+        # --> calculates the cross entropy between the softmax score (probaility) and hot encoded class expectation (all "0" except one "1") 
+        # reduce_mean 
+        # --> computes the mean of elements across dimensions of a tensor (cross entropy values here)
+        loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=scores, labels=true_classes))
+    return loss_op
 
 
 def finetune(root_dir, ckpt_file):
@@ -113,41 +168,17 @@ def finetune(root_dir, ckpt_file):
     model = AlexNet(ph_in, ph_dropput, NUM_LABELS, FINETUNE_LAYERS)
     
     # Link a variable to model output and get a list of all trainable model-variables
-    score = model.fc8
+    scores = model.fc8
     train_vars = [var for var in tf.trainable_variables() if var.name.split('/')[0] in FINETUNE_LAYERS]
-    # tf.trainable_variables() --> returns all variables created
+    # tf.trainable_variables() --> returns all variables createdq
 
-    print train_vars
-
-    # Op for calculating the loss
-    with tf.name_scope("cross_entropy"):
-        # softmax_cross_entropy_with_logits 
-        # --> calculates the cross entropy between the softmax score (probaility) and hot encoded class expectation (all "0" except one "1") 
-        # reduce_mean 
-        # --> computes the mean of elements across dimensions of a tensor (cross entropy values here)
-        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=score, labels=ph_out))
-
-    # Train op
-    with tf.name_scope("train"):
-        # Create optimizer and apply gradient descent to the trainable variables
-        optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
-
-        # 1) blog version
-        # gradients = tf.gradients(loss, train_vars) # returns a list of gradients for each trainable var = len(train_vars)
-        # gradients = zip(gradients, train_vars) # create a list of tuples [(g1, tv1), (g2, tv2), ...]
-        # train_op = optimizer.apply_gradients(grads_and_vars=gradients) 
-        # 2) TF retrain script
-        train_op = optimizer.minimize(loss) 
-
-    # Evaluation op: Accuracy of the model
-    with tf.name_scope("accuracy"):
-        prediction = tf.argmax(score, 1)
-        correct_pred = tf.equal(prediction, tf.argmax(ph_out, 1))
-        accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+    # Add/Get the different operations to optimize (get the loss, train and validate)
+    loss_op = get_loss_op(scores, ph_out)
+    train_op = get_train_op(loss_op, train_vars)
+    accuracy_op = get_evaluation_op(scores, ph_out)
 
     # Create a summery and writter to save it to disc
-    # merged_summary, writer = create_summary_writer(gradients, train_vars, loss, accuracy)
-    merged_summary, writer = create_summary_writer(train_vars, loss, accuracy)
+    merged_summary, writer = create_summary_writer(train_vars, loss_op, accuracy_op)
     # Initialize a saver to store model checkpoints
     saver = tf.train.Saver()
 
@@ -161,8 +192,11 @@ def finetune(root_dir, ckpt_file):
         sess.run(tf.global_variables_initializer())
         # Add the model graph to TensorBoard and print infos
         writer.add_graph(sess.graph)
-        # load the pretrained variables
-        model.load_initial_weights(sess)
+        # load the pretrained variables or a checkpoint
+        if ckpt_file:
+            saver.restore(sess, ckpt_file)
+        else:
+            model.load_initial_weights(sess)
 
         print("{} Start training...".format(datetime.now()))
 
@@ -189,7 +223,7 @@ def finetune(root_dir, ckpt_file):
 
             for _ in range(batches_per_epoch_val):
                 img_batch, label_batch = sess.run(next_batch)
-                acc = sess.run(accuracy, feed_dict={ph_in: img_batch, ph_out: label_batch, ph_dropput: 1.})
+                acc = sess.run(accuracy_op, feed_dict={ph_in: img_batch, ph_out: label_batch, ph_dropput: 1.})
                 test_acc += acc
                 test_count += 1
                 
@@ -213,7 +247,7 @@ def main():
         help='Folder with trainings/validation images'
     )
     parser.add_argument(
-        'ckpt',
+        '-ckpt',
         type=str,
         default='',
         help='Load this checkpoint file to continue training from this point on'
@@ -227,7 +261,7 @@ def main():
         print 'Image root directory \'%s\' not found' %root_dir
         return None
 
-    if (ckpt != '') and (ckpt not gfile.Exists(root_dir)):
+    if ckpt and not gfile.Exists(ckpt):
         print 'Could not find checkpoint file: \'%s\'' %ckpt
         return None
 
