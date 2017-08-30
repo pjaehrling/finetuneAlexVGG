@@ -10,7 +10,12 @@ import numpy as np
 #
 class AlexNet(object):
 
-    def __init__(self, tensor, keep_prob, num_classes, skip_layer, weights_path = 'weights/bvlc_alexnet.npy'):
+    input_width = 227
+    input_height = 227
+    subtract_imagenet_mean = True
+    use_bgr = True
+
+    def __init__(self, tensor, keep_prob, num_classes, skip_layer, weights_path = './weights/bvlc_alexnet.npy'):
         # - tensor: tf.placeholder, for the input images
         # - keep_prob: tf.placeholder, for the dropout rate
         # - num_classes: int, number of classes of the new dataset
@@ -58,7 +63,7 @@ class AlexNet(object):
         dropout7 = dropout(fc7, self.KEEP_PROB)
     
         # 8th Layer: FC and return unscaled activations (for tf.nn.softmax_cross_entropy_with_logits)
-        self.fc8 = fc(dropout7, 4096, self.NUM_CLASSES, relu = False, name='fc8')
+        self.final = fc(dropout7, 4096, self.NUM_CLASSES, relu = False, name='fc8')
 
     def load_initial_weights(self, session):
         # 1. weights from http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/ come as a dict of lists (e.g. weights['conv1'] is a list)

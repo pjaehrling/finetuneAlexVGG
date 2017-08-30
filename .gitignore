@@ -1,2 +1,2 @@
-retrain/alexnet/weights/*.npy
+retrain/weights/*
 *.pyc

@@ -9,13 +9,15 @@ import os
 import fnmatch
 import numpy as np
 import tensorflow as tf
-import imageloader as imgl
 
-from alexnet import AlexNet
-from caffe_classes import class_names
+from models.alexnet import AlexNet
+from helper.imagenet_classes import class_names
+from helper.imageloader import load_img_as_tensor
+
 from tensorflow.contrib.data import Dataset, Iterator
 from tensorflow.python.ops import math_ops
 
+NET = AlexNet
 
 def load_images():
     """
@@ -33,13 +35,13 @@ def load_images():
     images = []
     for f in files:
         print "> " + f
-        img = imgl.load_img_as_tensor(
+        img = load_img_as_tensor(
             os.path.join(img_dir, f),
-            input_width=227,
-            input_height=227,
+            input_width=NET.input_width,
+            input_height=NET.input_height,
             crop=False,
-            use_mean=True,
-            bgr=True
+            sub_in_mean=NET.subtract_imagenet_mean,
+            bgr=NET.use_bgr
         )
         images.append(img)
 
@@ -62,9 +64,9 @@ def validate():
     dropout = tf.constant(1, dtype=tf.float32)
 
     # create model with default config
-    model = AlexNet(next_element, dropout, num_classes=1000, skip_layer=[])
-    # create op to calculate softmax (fc8 is last layer in alexnet impl.)
-    softmax = tf.nn.softmax(model.fc8)
+    model = NET(next_element, dropout, num_classes=1000, skip_layer=[])
+    # create op to calculate softmax
+    softmax = tf.nn.softmax(model.final)
 
     print 'start validation ...'
     with tf.Session() as sess:

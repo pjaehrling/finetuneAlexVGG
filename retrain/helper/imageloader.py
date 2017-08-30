@@ -82,7 +82,7 @@ def load_image_paths_by_subfolder(root_dir, validation_ratio):
 
 
 
-def load_img_as_tensor(path, input_width, input_height, crop = False, use_mean = False, bgr = False):
+def load_img_as_tensor(path, input_width, input_height, crop = False, sub_in_mean = False, bgr = False):
     """
     Args:
         path: String path to the image that should be loaded
@@ -101,7 +101,7 @@ def load_img_as_tensor(path, input_width, input_height, crop = False, use_mean =
         img_resized = tf.image.resize_images(img_decoded, input_size)
         
     # Normalise
-    if use_mean:
+    if sub_in_mean:
         # Subtract the imagenet mean (mean over all imagenet images)
         imgnet_mean = tf.reshape(MEAN, [1, 1, 3])
         img_cast = math_ops.cast(img_resized, dtype=tf.float32)

@@ -9,30 +9,32 @@ import os
 import argparse
 import math
 import tensorflow as tf
-import imageloader as imgl
 
-from alexnet import AlexNet
+from models.alexnet import AlexNet
+from helper.imageloader import load_img_as_tensor, load_image_paths_by_subfolder
+
 from datetime import datetime
 from tensorflow.python.platform import gfile
 from tensorflow.contrib.data import Dataset, Iterator
 from tensorflow.python.framework.ops import convert_to_tensor
 
+NET = AlexNet
 
 # Input params
 VALIDATION_RATIO = 5 # every 5th element = 1/5 = 0.2 = 20% 
-INPUT_WIDTH = 227
-INPUT_HEIGHT = 227
 
 # Learning params
-LEARNING_RATE = 0.1 # [0.01, 0.1]
+LEARNING_RATE = 0.01 
 NUM_EPOCHS = 2
 BATCH_SIZE = 128
 
 # Network params
-DROPOUT_RATE = 0.2 # [0.5, 0.2]
-FINETUNE_LAYERS = ['fc8', 'fc7', 'fc6']
+DROPOUT_RATE = 0.5 # [0.5]
+FINETUNE_LAYERS = ['fc8']
 
 # Tensorflow/board params
+WRITE_SUMMARY = False
+WRITE_CHECKPOINTS = False
 DISPLAY_STEP = 20 # How often to write the tf.summary
 TENSORBOARD_PATH = "/tmp/tensorboard"
 CHECKPOINT_PATH = "/tmp/checkpoints"
@@ -54,9 +56,15 @@ def parse_data(path, label):
     # convert label number into one-hot-encoding
     one_hot = tf.one_hot(label, NUM_LABELS)
     # load the image
-    image = imgl.load_img_as_tensor(path, INPUT_WIDTH, INPUT_HEIGHT, crop=False, use_mean=True, bgr=True)
+    image = load_img_as_tensor(
+        path,
+        NET.input_width,
+        NET.input_height,
+        crop=False,
+        sub_in_mean=NET.subtract_imagenet_mean,
+        bgr=NET.use_bgr
+    )
     return image, one_hot
-
 
 
 def create_summary_writer(train_vars, loss, accuracy):
@@ -134,7 +142,7 @@ def get_loss_op(scores, true_classes):
 def finetune(root_dir, ckpt_file):
     """ """
     check_paths()
-    image_paths = imgl.load_image_paths_by_subfolder(root_dir, VALIDATION_RATIO)
+    image_paths = load_image_paths_by_subfolder(root_dir, VALIDATION_RATIO)
     
     global NUM_LABELS
     NUM_LABELS = len(image_paths['labels'])
@@ -160,7 +168,7 @@ def finetune(root_dir, ckpt_file):
     init_op_val   = iterator.make_initializer(data_val)
 
     # TF placeholder for graph input and output
-    ph_in = tf.placeholder(tf.float32, [BATCH_SIZE, INPUT_WIDTH, INPUT_HEIGHT, 3])
+    ph_in = tf.placeholder(tf.float32, [BATCH_SIZE, NET.input_width, NET.input_height, 3])
     ph_out = tf.placeholder(tf.float32, [BATCH_SIZE, NUM_LABELS])
     ph_dropput = tf.placeholder(tf.float32)
 
@@ -168,7 +176,7 @@ def finetune(root_dir, ckpt_file):
     model = AlexNet(ph_in, ph_dropput, NUM_LABELS, FINETUNE_LAYERS)
     
     # Link a variable to model output and get a list of all trainable model-variables
-    scores = model.fc8
+    scores = model.final
     train_vars = [var for var in tf.trainable_variables() if var.name.split('/')[0] in FINETUNE_LAYERS]
     # tf.trainable_variables() --> returns all variables createdq
 
@@ -178,9 +186,12 @@ def finetune(root_dir, ckpt_file):
     accuracy_op = get_evaluation_op(scores, ph_out)
 
     # Create a summery and writter to save it to disc
-    merged_summary, writer = create_summary_writer(train_vars, loss_op, accuracy_op)
+    if WRITE_SUMMARY:
+        merged_summary, writer = create_summary_writer(train_vars, loss_op, accuracy_op)
+    
     # Initialize a saver to store model checkpoints
-    saver = tf.train.Saver()
+    if WRITE_CHECKPOINTS:
+        saver = tf.train.Saver()
 
     # Get the number of training/validation steps per epoch to get through all images
     batches_per_epoch_train = int(math.floor(image_paths['training_image_count'] / (BATCH_SIZE + 0.0)))
@@ -191,7 +202,8 @@ def finetune(root_dir, ckpt_file):
         # Init all variables 
         sess.run(tf.global_variables_initializer())
         # Add the model graph to TensorBoard and print infos
-        writer.add_graph(sess.graph)
+        if WRITE_SUMMARY:
+            writer.add_graph(sess.graph)
         # load the pretrained variables or a checkpoint
         if ckpt_file:
             saver.restore(sess, ckpt_file)
@@ -210,7 +222,7 @@ def finetune(root_dir, ckpt_file):
                 img_batch, label_batch = sess.run(next_batch)
                 sess.run(train_op, feed_dict={ph_in: img_batch, ph_out: label_batch, ph_dropput: DROPOUT_RATE})
 
-                if batch_step % DISPLAY_STEP == 0:
+                if WRITE_SUMMARY and batch_step % DISPLAY_STEP == 0:
                     # Generate summary with the current batch of data and write to file
                     summary = sess.run(merged_summary, feed_dict={ph_in: img_batch, ph_out: label_batch, ph_dropput: 1.})
                     writer.add_summary(summary, epoch * batches_per_epoch_train + batch_step)
@@ -231,13 +243,14 @@ def finetune(root_dir, ckpt_file):
             print("{} Validation Accuracy = {:.10f}".format(datetime.now(), test_acc))
 
             # save checkpoint of the model
-            checkpoint = os.path.join(CHECKPOINT_PATH, 'model_epoch' + str(epoch+1) + '.ckpt')
-            save_path = saver.save(sess, checkpoint)
-            print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint))
+            if WRITE_CHECKPOINTS:
+                checkpoint = os.path.join(CHECKPOINT_PATH, 'model_epoch' + str(epoch+1) + '.ckpt')
+                save_path = saver.save(sess, checkpoint)
+                print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint))
 
         print("{} End training...".format(datetime.now()))
 
-
+###################################################################
 def main():
     """ """
     # Parse arguments
