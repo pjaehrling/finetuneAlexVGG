@@ -11,6 +11,7 @@ import numpy as np
 import tensorflow as tf
 
 from models.alexnet import AlexNet
+from models.vgg import VGG
 from helper.imagenet_classes import class_names
 from helper.imageloader import load_img_as_tensor
 
@@ -18,6 +19,7 @@ from tensorflow.contrib.data import Dataset, Iterator
 from tensorflow.python.ops import math_ops
 
 NET = AlexNet
+# NET = VGG
 
 def load_images():
     """
