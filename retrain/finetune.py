@@ -173,7 +173,7 @@ def finetune(root_dir, ckpt_file):
     ph_dropput = tf.placeholder(tf.float32)
 
     # Initialize model
-    model = AlexNet(ph_in, ph_dropput, NUM_LABELS, FINETUNE_LAYERS)
+    model = NET(ph_in, keep_prob=ph_dropput, num_classes=NUM_LABELS, retrain_layer=FINETUNE_LAYERS)
     
     # Link a variable to model output and get a list of all trainable model-variables
     scores = model.final

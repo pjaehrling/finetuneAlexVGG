@@ -7,6 +7,7 @@
 
 import os
 import fnmatch
+import argparse
 import numpy as np
 import tensorflow as tf
 
@@ -18,10 +19,7 @@ from helper.imageloader import load_img_as_tensor
 from tensorflow.contrib.data import Dataset, Iterator
 from tensorflow.python.ops import math_ops
 
-NET = AlexNet
-# NET = VGG
-
-def load_images():
+def load_images(model_def):
     """
     Load images (BGR) from ./images folder
     - Resizes/Croppes the images to 227 x 227 px
@@ -39,24 +37,27 @@ def load_images():
         print "> " + f
         img = load_img_as_tensor(
             os.path.join(img_dir, f),
-            input_width=NET.input_width,
-            input_height=NET.input_height,
+            input_width=model_def.input_width,
+            input_height=model_def.input_height,
             crop=False,
-            sub_in_mean=NET.subtract_imagenet_mean,
-            bgr=NET.use_bgr
+            sub_in_mean=model_def.subtract_imagenet_mean,
+            bgr=model_def.use_bgr
         )
         images.append(img)
 
     return Dataset.from_tensors(images)
 
 
-def validate():
+def validate(model_def):
     """
     Validate my alexnet implementation
+
+    Args:
+        model_def: the model class/definition
     """
 
     # load the images
-    images = load_images()
+    images = load_images(model_def)
 
     # create TensorFlow Iterator object
     iterator = Iterator.from_structure(images.output_types, images.output_shapes)
@@ -66,7 +67,7 @@ def validate():
     dropout = tf.constant(1, dtype=tf.float32)
 
     # create model with default config
-    model = NET(next_element, dropout, num_classes=1000, skip_layer=[])
+    model = model_def(next_element, dropout, num_classes=1000, retrain_layer=[])
     # create op to calculate softmax
     softmax = tf.nn.softmax(model.final)
 
@@ -88,8 +89,25 @@ def validate():
             best_index = np.argmax(prob)
             print "> " + class_names[best_index] + " -> %.4f" %prob[best_index]
 
+
 def main():
-    validate()
+    # Parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-model',
+        type=str,
+        default='alex',
+        help='Model to be validated'
+    )
+    args = parser.parse_args()
+    model_str = args.model
+
+    if model_str == 'vgg':
+        model_def = VGG
+    elif model_str == 'alex': # default
+        model_def = AlexNet
+
+    validate(model_def)
 
 if __name__ == '__main__':
     main()
