@@ -1,6 +1,6 @@
 #
 # Author: Philipp Jaehrling philipp.jaehrling@gmail.com)
-# Highly influenced by: https://kratzert.github.io/2017/02/24/finetuning-alexnet-with-tensorflow.html
+# Influenced by: https://kratzert.github.io/2017/02/24/finetuning-alexnet-with-tensorflow.html
 #
 import tensorflow as tf
 import numpy as np
@@ -79,8 +79,7 @@ class Model(object):
                             session.run(var.assign(data))
 
 
-    @staticmethod
-    def conv(tensor, filter_height, filter_width, num_filters, stride_y, stride_x, name, padding='SAME', groups=1):
+    def conv(self, tensor, filter_height, filter_width, num_filters, stride_y, stride_x, name, padding='SAME', groups=1):
         """
         Wrapper around the tensorflow conv-layer op
 
@@ -100,6 +99,7 @@ class Model(object):
         input_channels = int(tensor.get_shape()[-1])
         channels_per_layer = input_channels / groups # In case we split the data for multiple parallel conv-layer
         strides = [1, stride_y, stride_x, 1]
+        trainable = True if name in self.retrain_layer else False
         
         # Create lambda function for the convolution
         convolve = lambda input, kernel: tf.nn.conv2d(input, kernel, strides=strides, padding=padding)
@@ -108,7 +108,11 @@ class Model(object):
         with tf.variable_scope(name) as scope:
             # tf.get_variable(...) --> get an existing variable with these parameters or create a new one
             # ... prefixes the name with the current variable scope and performs reuse checks
-            weights = tf.get_variable('weights', shape=[filter_height, filter_width, channels_per_layer, num_filters])
+            weights = tf.get_variable(
+                'weights',
+                shape=[filter_height, filter_width, channels_per_layer, num_filters],
+                trainable=trainable
+            )
             # initializer=tf.truncated_normal( # -> Outputs random values from a truncated normal distribution
             #     [filter_height, filter_width, channels_per_layer, num_filters],
             #     name='weights',
@@ -128,7 +132,7 @@ class Model(object):
                 convolution = tf.concat(values=output_groups, axis=3)
 
             # Add biases
-            biases = tf.get_variable('biases', shape=[num_filters])
+            biases = tf.get_variable('biases', shape=[num_filters], trainable=trainable)
             # initializer=tf.constant(0.0, shape=[num_filters], dtype=tf.float32)
             out = tf.reshape(tf.nn.bias_add(convolution, biases), convolution.get_shape().as_list())
             # --> reshape([1, 2, 3, 4, 5, 6, 7, 8, 9], [3, 3]) ==> [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
@@ -139,8 +143,7 @@ class Model(object):
             return relu
 
 
-    @staticmethod
-    def fc(tensor, num_in, num_out, name, relu = True):
+    def fc(self, tensor, num_in, num_out, name, relu = True):
         """
         Wrapper around the tensorflow fully connected layer op
 
@@ -153,12 +156,14 @@ class Model(object):
 
         Returns:
         """
+        trainable = True if name in self.retrain_layer else False
+
         with tf.variable_scope(name) as scope:
 
             # Create tf variables for the weights and biases
-            weights = tf.get_variable('weights', shape=[num_in, num_out])
+            weights = tf.get_variable('weights', shape=[num_in, num_out], trainable=trainable)
             # initializer=tf.truncated_normal([num_in, num_out], dtype=tf.float32, stddev=1e-1)
-            biases = tf.get_variable('biases', [num_out])
+            biases = tf.get_variable('biases', [num_out], trainable=trainable)
             # initializer=tf.constant(1.0, shape=[num_out], dtype=tf.float32)
 
             # Matrix multiply weights and inputs and add bias
