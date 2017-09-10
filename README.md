@@ -36,7 +36,7 @@ python finetune.py /path/to/images -model alex
 python finetune.py /path/to/images -model vgg
 ```
 
-*"/path/to/image"* should point to a folder with a set of sub-folders, each named after one of your final categories and containing only images from that category.
+`/path/to/image` should point to a folder with a set of sub-folders, each named after one of your final categories and containing only images from that category.
 
 With every epoch a checkpoint file can be written to save the training progress.
 It's possible to start the training from a saved checkpoint file by providing a path to that file when calling the finetune script.

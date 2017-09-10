@@ -16,10 +16,10 @@ from tensorflow.contrib.data import Dataset, Iterator
 
 # Tensorflow/board params
 WRITE_SUMMARY = False
-WRITE_CHECKPOINTS = False
+WRITE_CHECKPOINTS = True
 DISPLAY_STEP = 20 # How often to write the tf.summary
-TENSORBOARD_PATH = "/tmp/tensorboard"
-CHECKPOINT_PATH = "/tmp/checkpoints"
+TENSORBOARD_PATH = "/Users/philipp/Uni/Masterarbeit/tensorboard"
+CHECKPOINT_PATH = "/Users/philipp/Uni/Masterarbeit/checkpoints"
 
 
 class Retrainer(object):
@@ -76,7 +76,7 @@ class Retrainer(object):
 
 
     @staticmethod
-    def get_train_op(loss, var_list, learning_rate):
+    def get_train_op(loss, learning_rate):
         """Inserts the training operation
         Creates an optimizer and applies gradient descent to the trainable variables
 
@@ -88,17 +88,10 @@ class Retrainer(object):
         """
         with tf.name_scope("train"):
             optimizer = tf.train.GradientDescentOptimizer(learning_rate)
-
-            # 1) Blog way
-            gradients = tf.gradients(loss, var_list) # returns a list of gradients for each trainable var = len(train_vars)
-            gradients = zip(gradients, var_list) # create a list of tuples [(g1, tv1), (g2, tv2), ...]
-            train_op = optimizer.apply_gradients(grads_and_vars=gradients)
-
-            # 2) TF retrain way
-            # train_op = optimizer.minimize(loss)
+            # TODO try another optimizer like like tf.train.RMSPropOptimizer(...)
+            # see: https://www.tensorflow.org/versions/r0.12/api_docs/python/train/optimizers
+            train_op = optimizer.minimize(loss)
             # --> minimize() = combines calls compute_gradients() and apply_gradients()
-            # TODO: Find out how they make sure it just trains the last n-layers
-            # This takes longer, but has the same validation accuracy??????
         return train_op
 
 
@@ -180,12 +173,20 @@ class Retrainer(object):
         
         # Link a variable to model output and get a list of all trainable model-variables
         scores = model.final
-        train_vars = [var for var in tf.trainable_variables() if var.name.split('/')[0] in finetune_layers]
-        # tf.trainable_variables() --> returns all variables createdq
+        
+        # Get a list with all trainable variables
+        train_vars = tf.trainable_variables()
+        print "=> Will train:"
+        for var in train_vars:
+            print("  => {}".format(var))
+        print "=> Learningrate: %.4f" %learning_rate
+        print "=> Batchsize: %i" %batch_size
+        print "=> Dropout: %.4f" %(1.0 - keep_prob)
+        print "##################################"
 
         # Add/Get the different operations to optimize (get the loss, train and validate)
         loss_op = self.get_loss_op(scores, ph_out)
-        train_op = self.get_train_op(loss_op, train_vars, learning_rate)
+        train_op = self.get_train_op(loss_op, learning_rate)
         accuracy_op = self.get_evaluation_op(scores, ph_out)
 
         # Create a summery and writter to save it to disc
@@ -244,6 +245,7 @@ class Retrainer(object):
                     
                 test_acc /= test_count
                 print("{} Validation Accuracy = {:.10f}".format(datetime.now(), test_acc))
+                # tf.logging.info('%s: Validation Accuracy = %.10f%%' % (datetime.now(), test_acc))
 
                 # save checkpoint of the model
                 if WRITE_CHECKPOINTS:

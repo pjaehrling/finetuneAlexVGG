@@ -6,39 +6,37 @@
 #
 
 import argparse
+import tensorflow as tf
 
 from models.alexnet import AlexNet
 from models.vgg import VGG
-from helper.imageloader import load_image_paths_by_subfolder
+from helper.imageloader import load_image_paths_by_subfolder, load_image_paths_by_file
 from helper.retrainer import Retrainer
 
 from tensorflow.python.platform import gfile
 
 # Input params
-VALIDATION_RATIO = 5 # every 5th element = 1/5 = 0.2 = 20%
+VALIDATION_RATIO = 10 # every 5th element = 1/5 = 0.2 = 20%
 
 # Learning params
-LEARNING_RATE = 0.01 
-NUM_EPOCHS = 2
-BATCH_SIZE = 128
+LEARNING_RATE = 0.005
+# TODO: try learning rate decay
+# see: https://www.tensorflow.org/versions/r0.12/api_docs/python/train/decaying_the_learning_rate
+NUM_EPOCHS = 20
+BATCH_SIZE = 32
 
 # Network params
 KEEP_PROB = 1.0 # [0.5]
-FINETUNE_LAYERS = ['fc7', 'fc8']
+FINETUNE_LAYERS = ['fc6', 'fc7', 'fc8']
 
 
-def finetune(root_dir, ckpt, model_def):
+def finetune(image_paths, ckpt, model_def):
     """
     Args:
-        root_dir:
+        image_paths:
         ckpt:
         model_def:
     """
-    image_paths = load_image_paths_by_subfolder(root_dir, VALIDATION_RATIO)
-    if image_paths['training_image_count'] < BATCH_SIZE:
-        print 'Not enough training images in \'%s\'' %root_dir
-        return
-    
     trainer = Retrainer(model_def, image_paths)
     trainer.run(
         FINETUNE_LAYERS,
@@ -54,11 +52,22 @@ def main():
     """
     Main
     """
+    # Make sure the logging output is visible.
+    tf.logging.set_verbosity(tf.logging.INFO)
+
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        'root_dir',
+        '-image_dir',
+        type=str,
+        default='',
         help='Folder with trainings/validation images'
+    )
+    parser.add_argument(
+        '-image_file',
+        type=str,
+        default='',
+        help='File with a list of trainings/validation images and their labels'
     )
     parser.add_argument(
         '-ckpt',
@@ -74,24 +83,50 @@ def main():
     )
     
     args = parser.parse_args()
-    root_dir = args.root_dir
+    image_dir = args.image_dir
+    image_file = args.image_file
     ckpt = args.ckpt
     model_str = args.model
 
-    if not gfile.Exists(root_dir):
-        print 'Image root directory \'%s\' not found' %root_dir
+    # Load images
+    if not image_dir and not image_file:
+        print 'Provide one of the following options to load images \'-image_file\' or \'-image_path\'' %image_dir
+        return None
+    elif image_dir: 
+        if not gfile.Exists(image_dir):
+            print 'Image root directory \'%s\' not found' %image_dir
+            return None
+        else:
+            image_paths = load_image_paths_by_subfolder(image_dir, VALIDATION_RATIO)
+    else:
+        if not gfile.Exists(image_file):
+            print 'Image file \'%s\' not found' %image_file
+            return None
+        else:
+            image_paths = load_image_paths_by_file(image_file, VALIDATION_RATIO)
+
+    # Make sure we have enough images to fill at least one training/validation batch
+    if image_paths['training_image_count'] < BATCH_SIZE:
+        print 'Not enough training images in \'%s\'' %image_dir
         return None
 
-    if ckpt and not gfile.Exists(ckpt):
-        print 'Could not find checkpoint file: \'%s\'' %ckpt
+    if image_paths['validation_image_count'] < BATCH_SIZE:
+        print 'Not enough validation images in \'%s\'' %image_dir
         return None
+ 
+    # Make sure the checkpoint file exists
+    # if ckpt and not gfile.Exists(ckpt):
+    #     print 'Could not find checkpoint file: \'%s\'' %ckpt
+    #     return None
 
+    # Set a CNN model definition
     if model_str == 'vgg':
         model_def = VGG
     elif model_str == 'alex': # default
         model_def = AlexNet
 
-    finetune(root_dir, ckpt, model_def)
+    # Start retraining/finetuning
+    finetune(image_paths, ckpt, model_def)
 
 if __name__ == '__main__':
     main()
