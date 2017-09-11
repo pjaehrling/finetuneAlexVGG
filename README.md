@@ -5,7 +5,7 @@ AlexNet and VGG16 model implementations for Tensorflow, with a validation and fi
 ## Requirements
 
 - Python 2.7
-- TensorFlow >= 1.13rc0
+- TensorFlow >= 1.13rc0 (I guess everything from version 1.0 on will work)
 - Numpy
 
 ## Content
@@ -31,19 +31,28 @@ python validate.py -model vgg
 
 ### Run finetuning/retraining on selected layers
 ```
-python finetune.py /path/to/images -model alex
+python finetune.py -image_path /path/to/images -model alex
 ...
-python finetune.py /path/to/images -model vgg
+python finetune.py -image_path /path/to/images -model vgg
 ```
 
 `/path/to/image` should point to a folder with a set of sub-folders, each named after one of your final categories and containing only images from that category.
 
+Another way is to provide a file with a list of image-paths and labels using the `-image_file` argument instead of `-image_path`. 
+e.g.
+```
+cat /path/to/cat1.jpg
+cat /path/to/cat2.jpg
+dog /path/to/dog1.jpg
+...
+```
+
 With every epoch a checkpoint file can be written to save the training progress.
 It's possible to start the training from a saved checkpoint file by providing a path to that file when calling the finetune script.
 ```
-python finetune.py /path/to/images -model alex
+python finetune.py -image_path /path/to/images -model alex
 ...
-python finetune.py /path/to/images -model vgg -ckpt /path/to/file.ckpt
+python finetune.py -image_path /path/to/images -model vgg -ckpt /path/to/file.ckpt
 ```
 
 TensorFlows summaries are implemented so that TensorBoard can be used.

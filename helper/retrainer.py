@@ -18,8 +18,8 @@ from tensorflow.contrib.data import Dataset, Iterator
 WRITE_SUMMARY = False
 WRITE_CHECKPOINTS = True
 DISPLAY_STEP = 20 # How often to write the tf.summary
-TENSORBOARD_PATH = "/Users/philipp/Uni/Masterarbeit/tensorboard"
-CHECKPOINT_PATH = "/Users/philipp/Uni/Masterarbeit/checkpoints"
+TENSORBOARD_PATH = "/tmp/tensorboard"
+CHECKPOINT_PATH = "/tmp/checkpoints"
 
 
 class Retrainer(object):
