@@ -6,20 +6,27 @@ import tensorflow as tf
 import numpy as np
 
 from models.model import Model
+from preprocessing import bgr_resize_prep
 
 class AlexNet(Model):
     """
     AlexNet model definition for Tensorflow
     """
+    image_size = 227
+    image_prep = bgr_resize_prep
 
-    input_width = 227
-    input_height = 227
-    subtract_imagenet_mean = True
-    use_bgr = True
-
-    def __init__(self, tensor, keep_prob, num_classes, retrain_layer, weights_path='./weights/bvlc_alexnet.npy'):
+    def __init__(self, tensor, keep_prob=1.0, num_classes=1000, retrain_layer=[], weights_path='./weights/bvlc_alexnet.npy'):
         # Call the parent class, which will create the graph
         Model.__init__(self, tensor, keep_prob, num_classes, retrain_layer, weights_path)
+
+        # Call the create function to build the computational graph
+        self.create()
+
+    def get_prediction(self):
+        return self.final
+
+    def load_initial_weights(self, session):
+        self.load_initial_numpy_weights(session)
 
     def create(self):
         # 1st Layer: Conv (w ReLu) -> Pool -> Lrn

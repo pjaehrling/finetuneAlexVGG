@@ -5,21 +5,28 @@ import tensorflow as tf
 import numpy as np
 
 from models.model import Model
+from preprocessing import bgr_resize_prep
 
 class VGG(Model):
     """
     VGG16 model definition for Tensorflow
     """
-    # TODO might use a param to init the net as VGG 19 (adds conv3_4, conv4_4, conv5_4)
 
-    input_width = 224
-    input_height = 224
-    subtract_imagenet_mean = True
-    use_bgr = True
+    image_size = 224
+    image_prep = bgr_resize_prep
 
-    def __init__(self, tensor, keep_prob, num_classes, retrain_layer, weights_path='./weights/vgg16.npy'):
+    def __init__(self, tensor, keep_prob=1.0, num_classes=1000, retrain_layer=[], weights_path='./weights/vgg16.npy'):
         # Call the parent class, which will create the graph
         Model.__init__(self, tensor, keep_prob, num_classes, retrain_layer, weights_path)
+        
+        # Call the create function to build the computational graph
+        self.create()
+
+    def get_prediction(self):
+        return self.final
+
+    def load_initial_weights(self, session):
+        self.load_initial_numpy_weights(session)
 
     def create(self):
         # 1st Layer: Conv -> Conv -> Pool

@@ -10,6 +10,8 @@ import tensorflow as tf
 
 from models.alexnet import AlexNet
 from models.vgg import VGG
+from models.vgg_slim import VGGslim
+from models.inception_v3 import InceptionV3
 from helper.imageloader import load_image_paths_by_subfolder, load_image_paths_by_file
 from helper.retrainer import Retrainer
 
@@ -29,6 +31,10 @@ BATCH_SIZE = 32
 KEEP_PROB = 1.0 # [0.5]
 FINETUNE_LAYERS = ['fc6', 'fc7', 'fc8']
 
+# HARDWARE USAGE
+DEVICE = '/gpu:0'
+MEMORY_USAGE = 1.0
+
 
 def finetune(image_paths, ckpt, model_def):
     """
@@ -44,9 +50,10 @@ def finetune(image_paths, ckpt, model_def):
         LEARNING_RATE,
         BATCH_SIZE,
         KEEP_PROB,
-        ckpt
+        ckpt,
+        MEMORY_USAGE
+        #, DEVICE
     )
-
 
 def main():
     """
@@ -113,15 +120,14 @@ def main():
     if image_paths['validation_image_count'] < BATCH_SIZE:
         print 'Not enough validation images in \'%s\'' %image_dir
         return None
- 
-    # Make sure the checkpoint file exists
-    # if ckpt and not gfile.Exists(ckpt):
-    #     print 'Could not find checkpoint file: \'%s\'' %ckpt
-    #     return None
 
     # Set a CNN model definition
     if model_str == 'vgg':
         model_def = VGG
+    elif model_str == 'vgg_slim':
+        model_def = VGGslim
+    elif model_str == 'inc_v3':
+        model_def = InceptionV3
     elif model_str == 'alex': # default
         model_def = AlexNet
 

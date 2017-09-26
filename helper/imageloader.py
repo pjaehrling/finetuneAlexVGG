@@ -13,9 +13,8 @@ from tensorflow.python.framework.ops import convert_to_tensor
 
 FILE_EXT = ['jpg', 'jpeg', 'JPG', 'JPEG']
 MEAN = tf.constant([124, 117, 104], dtype=tf.float32) # IMAGENET
-# MEAN = tf.constant([123.68, 116.779, 103.939], dtype=tf.float32)
 
-def load_image_paths_by_subfolder(root_dir, validation_ratio):
+def load_image_paths_by_subfolder(root_dir, validation_ratio, skip_folder=[], load_as_tensor=True, use_subfolder=False):
     """
     Create a list of labeled images, seperated in training and validation sets.
     Will create a new label/class for every sub-directory in the 'root_dir'.
@@ -35,17 +34,22 @@ def load_image_paths_by_subfolder(root_dir, validation_ratio):
     validation_labels = []
         
     for d in os.listdir(root_dir):
+        pattern = []
         dir_path = os.path.join(root_dir, d)
-        if not os.path.isdir(dir_path): 
-            continue # skip this file
+        if not os.path.isdir(dir_path) or d in skip_folder:
+            continue # skip files and skipped folders
+        
+        print 'Looking for images in %s' %d
 
-        # get directory name and log progress
-        dir_name = os.path.basename(dir_path)
-        print 'Looking for images in %s' %dir_name
+        if use_subfolder:
+            for sub_dir in os.listdir(dir_path):
+                sub_path = os.path.join(dir_path, sub_dir)
+                if sub_dir not in skip_folder and os.path.isdir(sub_path):
+                    pattern += (os.path.join(sub_path, '*.' + ext) for ext in FILE_EXT)
 
         # get all image files in this directory
-        patterns = (os.path.join(dir_path, '*.' + ext) for ext in FILE_EXT)
-        image_paths = gfile.Glob(patterns) # Returns a list of paths that match the given pattern(s)
+        pattern += (os.path.join(dir_path, '*.' + ext) for ext in FILE_EXT)
+        image_paths = gfile.Glob(pattern) # Returns a list of paths that match the given pattern
         if not image_paths:
             print '=> No image files found'
             continue # skip empty directories
@@ -53,7 +57,7 @@ def load_image_paths_by_subfolder(root_dir, validation_ratio):
         print '=> Found %i images' %len(image_paths)
 
         # split the list into traning and validation
-        label = re.sub(r'[^a-z0-9]+', ' ', dir_name.lower())
+        label = re.sub(r'[^a-z0-9]+', ' ', d.lower())
         image_paths_sub = image_paths[::validation_ratio]
         del image_paths[::validation_ratio]
 
@@ -73,15 +77,15 @@ def load_image_paths_by_subfolder(root_dir, validation_ratio):
     return {
         'labels': labels,
         'training_image_count': len(training_paths),
-        'training_paths': convert_to_tensor(training_paths, dtype=tf.string),
-        'training_labels': convert_to_tensor(training_labels, dtype=tf.int32),
+        'training_paths': convert_to_tensor(training_paths, dtype=tf.string) if load_as_tensor else training_paths,
+        'training_labels': convert_to_tensor(training_labels, dtype=tf.int32) if load_as_tensor else training_labels,
         'validation_image_count': len(validation_paths),
-        'validation_paths': convert_to_tensor(validation_paths, dtype=tf.string),
-        'validation_labels': convert_to_tensor(validation_labels, dtype=tf.int32)
+        'validation_paths': convert_to_tensor(validation_paths, dtype=tf.string) if load_as_tensor else validation_paths,
+        'validation_labels': convert_to_tensor(validation_labels, dtype=tf.int32) if load_as_tensor else validation_labels
     }
 
 
-def load_image_paths_by_file(image_file, validation_ratio):
+def load_image_paths_by_file(image_file, validation_ratio, load_as_tensor=True):
     """
     Create a list of labeled images, seperated in training and validation sets.
     Reads the given 'image_file' line by line, where every line has the format *label* *image_path*
@@ -135,46 +139,9 @@ def load_image_paths_by_file(image_file, validation_ratio):
     return {
         'labels': labels,
         'training_image_count': len(training_paths),
-        'training_paths': convert_to_tensor(training_paths, dtype=tf.string),
-        'training_labels': convert_to_tensor(training_labels, dtype=tf.int32),
+        'training_paths': convert_to_tensor(training_paths, dtype=tf.string) if load_as_tensor else training_paths,
+        'training_labels': convert_to_tensor(training_labels, dtype=tf.int32) if load_as_tensor else training_labels,
         'validation_image_count': len(validation_paths),
-        'validation_paths': convert_to_tensor(validation_paths, dtype=tf.string),
-        'validation_labels': convert_to_tensor(validation_labels, dtype=tf.int32)
+        'validation_paths': convert_to_tensor(validation_paths, dtype=tf.string) if load_as_tensor else validation_paths,
+        'validation_labels': convert_to_tensor(validation_labels, dtype=tf.int32) if load_as_tensor else validation_labels
     }
-
-
-
-def load_img_as_tensor(path, input_width, input_height, crop = False, sub_in_mean = False, bgr = False):
-    """
-    Args:
-        path: String path to the image that should be loaded
-
-    Returns:
-        A tensor containing the image (resized/cropped and standardized) with it's label
-    """
-    img_file    = tf.read_file(path)
-    img_decoded = tf.image.decode_jpeg(img_file, channels=3)
-
-    # Resize / Crop
-    if crop:
-        img_resized = tf.image.resize_image_with_crop_or_pad(img_decoded, input_width, input_height) 
-    else:
-        input_size = tf.constant([input_width, input_height], dtype=tf.int32)
-        img_resized = tf.image.resize_images(img_decoded, input_size)
-        
-    # Normalise
-    if sub_in_mean:
-        # Subtract the imagenet mean (mean over all imagenet images)
-        imgnet_mean = tf.reshape(MEAN, [1, 1, 3])
-        img_cast = math_ops.cast(img_resized, dtype=tf.float32)
-        img_standardized = math_ops.subtract(img_cast, imgnet_mean)
-    else:
-        # calulates the mean for every image separately (if I got this right)
-        img_standardized = tf.image.per_image_standardization(img_resized)
-
-    if bgr:
-        # e.g. in my alexnet implementation the images are feed to the net in BGR format, NOT RGB
-        channels = tf.unstack(img_standardized, axis=-1)
-        img_standardized  = tf.stack([channels[2], channels[1], channels[0]], axis=-1)
-
-    return img_standardized

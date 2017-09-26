@@ -13,40 +13,11 @@ import tensorflow as tf
 
 from models.alexnet import AlexNet
 from models.vgg import VGG
+from models.vgg_slim import VGGslim
+from models.inception_v3 import InceptionV3
 from helper.imagenet_classes import class_names
-from helper.imageloader import load_img_as_tensor
 
 from tensorflow.contrib.data import Dataset, Iterator
-from tensorflow.python.ops import math_ops
-
-def load_images(model_def):
-    """
-    Load images (BGR) from ./images folder
-    - Resizes/Croppes the images to 227 x 227 px
-    - Subtracts the ImageNet mean
-
-    Returns:
-        Tensorflow Dataset with the images (BGR) loaded as tensors
-    """
-    print "loading images ..."
-    img_dir = os.path.join('.', 'images')
-    files = fnmatch.filter(os.listdir(img_dir), '*.jpeg')
-
-    images = []
-    for f in files:
-        print "> " + f
-        img = load_img_as_tensor(
-            os.path.join(img_dir, f),
-            input_width=model_def.input_width,
-            input_height=model_def.input_height,
-            crop=False,
-            sub_in_mean=model_def.subtract_imagenet_mean,
-            bgr=model_def.use_bgr
-        )
-        images.append(img)
-
-    return Dataset.from_tensors(images)
-
 
 def validate(model_def):
     """
@@ -56,20 +27,33 @@ def validate(model_def):
         model_def: the model class/definition
     """
 
-    # load the images
-    images = load_images(model_def)
+    img_dir = os.path.join('.', 'images')
+    images = []
+
+    print "loading images ..."
+    files = fnmatch.filter(os.listdir(img_dir), '*.jpeg')
+    for f in files:
+        print "> " + f
+        img_file      = tf.read_file(os.path.join(img_dir, f))
+        img_decoded   = tf.image.decode_jpeg(img_file, channels=3)
+        img_processed = model_def.image_prep.preprocess_image(
+            image=img_decoded, 
+            output_height=model_def.image_size,
+            output_width=model_def.image_size,
+            is_training=False
+        )
+        images.append(img_processed)
 
     # create TensorFlow Iterator object
+    images = Dataset.from_tensors(images)
     iterator = Iterator.from_structure(images.output_types, images.output_shapes)
     next_element = iterator.get_next()
     iterator_init_op = iterator.make_initializer(images)
-    
-    dropout = tf.constant(1, dtype=tf.float32)
 
-    # create model with default config
-    model = model_def(next_element, dropout, num_classes=1000, retrain_layer=[])
-    # create op to calculate softmax
-    softmax = tf.nn.softmax(model.final)
+    # create the model and get scores (pipe to softmax)
+    model = model_def(next_element)
+    scores = model.get_prediction()
+    softmax = tf.nn.softmax(scores)
 
     print 'start validation ...'
     with tf.Session() as sess:
@@ -83,12 +67,14 @@ def validate(model_def):
 
         # run the graph
         probs = sess.run(softmax)
+
+        # sometime we have an offset
+        offset = len(class_names) - len(probs[0])
         
         # print the results
         for prob in probs:
             best_index = np.argmax(prob)
-            print "> " + class_names[best_index] + " -> %.4f" %prob[best_index]
-
+            print "> " + class_names[best_index+offset] + " -> %.4f" %prob[best_index]
 
 def main():
     # Parse arguments
@@ -104,6 +90,10 @@ def main():
 
     if model_str == 'vgg':
         model_def = VGG
+    elif model_str == 'vgg_slim':
+        model_def = VGGslim
+    elif model_str == 'inc_v3':
+        model_def = InceptionV3
     elif model_str == 'alex': # default
         model_def = AlexNet
 

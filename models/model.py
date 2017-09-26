@@ -2,8 +2,9 @@
 # Author: Philipp Jaehrling philipp.jaehrling@gmail.com)
 # Influenced by: https://kratzert.github.io/2017/02/24/finetuning-alexnet-with-tensorflow.html
 #
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
+import tensorflow.contrib.slim as slim
 
 #
 # Parent class for models
@@ -12,13 +13,9 @@ class Model(object):
     """
     Parent class for multiple CNN model classes
     """
-
     # These params should be filled for each model
-    input_width = 0
-    input_height = 0
-    subtract_imagenet_mean = True
-    use_bgr = True
-
+    image_size = 0
+    image_prep = False
 
     def __init__(self, tensor, keep_prob, num_classes, retrain_layer, weights_path):
         """
@@ -27,7 +24,7 @@ class Model(object):
             keep_prob: tf.placeholder, for the dropout rate
             num_classes: int, number of classes of the new dataset
             retrain_layer: list of strings, names of the layers you want to reinitialize
-            weights_path: path string, path to the pretrained weights
+            weights_path: path string, path to the pretrained weights (numpy or checkpoint)
         """
    
         # Parse input arguments
@@ -37,24 +34,28 @@ class Model(object):
         self.retrain_layer = retrain_layer
         self.weights_path = weights_path
         
-        # Set output to be input be default, will be set as soon as we create the graph
-        self.final = tensor 
-
-        # Call the create function to build the computational graph
-        self.create()
+        # Set output to be input be default, will be set in the subclasses
+        self.final = tensor
 
 
-    def create(self):
+    def get_prediction(self):
         """
-        Build/Create the model graph
         """
-        raise NotImplementedError("Subclass must implement abstract method")
+        raise NotImplementedError("Subclass must implement method")
 
 
     def load_initial_weights(self, session):
+        """Load the initial weights
+
+        Args:
+            session: current tensorflow session
         """
-        Load the initial weights
-        Do not init the layers that we want to retrain
+        raise NotImplementedError("Subclass must implement method")
+
+
+    def load_initial_numpy_weights(self, session):
+        """Load the initial weights from a numpy file
+        Does not init the layers that we want to retrain
 
         Args:
             session: current tensorflow session
@@ -78,7 +79,26 @@ class Model(object):
                             var = tf.get_variable('weights', trainable = False)
                             session.run(var.assign(data))
 
+    
+    def load_initial_checkpoint(self, session):
+        """Load the initial weights from a checkpoint file
+        Does not init the layers that we want to retrain
 
+        Args:
+            session: current tensorflow session
+        """
+        restore_vars = [v for v in slim.get_variables_to_restore() if not v.name.split('/')[1] in self.retrain_layer]
+
+        # Create and call an operation that reads the network weights from the checkpoint file
+        weight_init_op = slim.assign_from_checkpoint_fn(self.weights_path, restore_vars)
+        weight_init_op(session)
+        # session.run(weight_init_op())
+        # TODO any difference in calling it either way?
+
+
+    ############################################################################
+    # LAYER HELPER FUNCTIONS
+    ############################################################################
     def conv(self, tensor, filter_height, filter_width, num_filters, stride_y, stride_x, name, padding='SAME', groups=1):
         """
         Wrapper around the tensorflow conv-layer op

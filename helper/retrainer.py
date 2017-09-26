@@ -5,21 +5,18 @@
 
 import os
 import math
-import tensorflow as tf
-
-from models.alexnet import AlexNet
-from models.vgg import VGG
-from helper.imageloader import load_img_as_tensor
-
 from datetime import datetime
+
+# Tensorflow imports
+import tensorflow as tf
 from tensorflow.contrib.data import Dataset, Iterator
 
 # Tensorflow/board params
 WRITE_SUMMARY = False
-WRITE_CHECKPOINTS = True
+WRITE_CHECKPOINTS = False
 DISPLAY_STEP = 20 # How often to write the tf.summary
-TENSORBOARD_PATH = "/tmp/tensorboard"
-CHECKPOINT_PATH = "/tmp/checkpoints"
+TENSORBOARD_PATH = "../tensorboard"
+CHECKPOINT_PATH = "../checkpoints"
 
 
 class Retrainer(object):
@@ -76,13 +73,13 @@ class Retrainer(object):
 
 
     @staticmethod
-    def get_train_op(loss, learning_rate):
+    def get_train_op(loss, learning_rate, train_vars):
         """Inserts the training operation
         Creates an optimizer and applies gradient descent to the trainable variables
 
         Args:
             loss: the cross entropy mean (scors <> real class)
-            var_list: list of all trainable variables
+            train_vars: list of all trainable variables
         Returns:
             Traning/optizing operation
         """
@@ -114,42 +111,84 @@ class Retrainer(object):
         return loss_op
 
 
-    def parse_data(self, path, label):
-        """
+    @staticmethod
+    def print_infos(train_vars, learning_rate, batch_size, keep_prob):
+        """Print infos about the current run
 
+        Args:
+            restore_vars: 
+            train_vars:
+            learning_rate:
+            batch_size:
+            keep_prob:
+        """
+        print "=> Will train:"
+        for var in train_vars:
+            print("  => {}".format(var))
+        print "=> Learningrate: %.4f" %learning_rate
+        print "=> Batchsize: %i" %batch_size
+        print "=> Dropout: %.4f" %(1.0 - keep_prob)
+        print "##################################"
+
+
+    def parse_data(self, path, label, is_training):
+        '''
         Args:
             path:
             label:
-        """
+            is_training:
+
+        Returns:
+            image: image loaded and preprocesed
+            label: converted label number into one-hot-encoding (binary)
+        '''
         # convert label number into one-hot-encoding
         one_hot = tf.one_hot(label, self.num_classes)
-        # load the image
-        image = load_img_as_tensor(
-            path,
-            self.model_def.input_width,
-            self.model_def.input_height,
-            crop=False,
-            sub_in_mean=self.model_def.subtract_imagenet_mean,
-            bgr=self.model_def.use_bgr
-        )
-        return image, one_hot
 
-    def run(self, finetune_layers, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, ckpt_file = ''):
+        # load the image
+        img_file      = tf.read_file(path)
+        img_decoded   = tf.image.decode_jpeg(img_file, channels=3)
+        img_processed = self.model_def.image_prep.preprocess_image(
+            image=img_decoded,
+            output_height=self.model_def.image_size,
+            output_width=self.model_def.image_size,
+            is_training=is_training
+        )
+        return img_processed, one_hot
+
+    def parse_train_data(self, path, label):
+        return self.parse_data(path, label, True)
+
+    def parse_validation_data(self, path, label):
+        return self.parse_data(path, label, False)
+
+    
+    ############################################################################
+    # RUNNING THE ACTUAL RETRAINING
+    ############################################################################
+    def run_on_device(self, finetune_layers, epochs, learning_rate, batch_size, keep_prob, ckpt_file, memory_usage, device = '/gpu:0'):
+        """
+        Decorator for the run methode, but running it on a given device (like '/gpu:0')
+        Args:
+            device = 
+        """
+        with tf.device(device):
+            self.run(finetune_layers, epochs, learning_rate, batch_size, keep_prob, ckpt_file, memory_usage)
+
+    def run(self, finetune_layers, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, ckpt_file = '', memory_usage = 1.0):
         """
         Run a training on part of the model (retrain/finetune)
 
         Args:
-            root_dir:
-            ckpt_file:
-            model_def:
+            
         """
         # create datasets
         data_train = Dataset.from_tensor_slices((self.image_paths['training_paths'], self.image_paths['training_labels']))
         data_val  = Dataset.from_tensor_slices((self.image_paths['validation_paths'], self.image_paths['validation_labels']))
 
         # load and preprocess the images
-        data_train = data_train.map(self.parse_data)
-        data_val   = data_val.map(self.parse_data)
+        data_train = data_train.map(self.parse_train_data)
+        data_val   = data_val.map(self.parse_validation_data)
 
         # create a new dataset with batches of images
         data_train = data_train.batch(batch_size)
@@ -164,29 +203,21 @@ class Retrainer(object):
         init_op_val   = iterator.make_initializer(data_val)
 
         # TF placeholder for graph input and output
-        ph_in = tf.placeholder(tf.float32, [batch_size, self.model_def.input_width, self.model_def.input_height, 3])
+        ph_in = tf.placeholder(tf.float32, [batch_size, self.model_def.image_size, self.model_def.image_size, 3])
         ph_out = tf.placeholder(tf.float32, [batch_size, self.num_classes])
         ph_keep_prob = tf.placeholder(tf.float32)
 
         # Initialize model
         model = self.model_def(ph_in, keep_prob=ph_keep_prob, num_classes=self.num_classes, retrain_layer=finetune_layers)
+        scores = model.get_prediction()
         
-        # Link a variable to model output and get a list of all trainable model-variables
-        scores = model.final
-        
-        # Get a list with all trainable variables
+        # Get a list with all trainable variables and print infos for the current run
         train_vars = tf.trainable_variables()
-        print "=> Will train:"
-        for var in train_vars:
-            print("  => {}".format(var))
-        print "=> Learningrate: %.4f" %learning_rate
-        print "=> Batchsize: %i" %batch_size
-        print "=> Dropout: %.4f" %(1.0 - keep_prob)
-        print "##################################"
+        self.print_infos(train_vars, learning_rate, batch_size, keep_prob)
 
         # Add/Get the different operations to optimize (get the loss, train and validate)
         loss_op = self.get_loss_op(scores, ph_out)
-        train_op = self.get_train_op(loss_op, learning_rate)
+        train_op = self.get_train_op(loss_op, learning_rate, train_vars)
         accuracy_op = self.get_evaluation_op(scores, ph_out)
 
         # Create a summery and writter to save it to disc
@@ -202,12 +233,16 @@ class Retrainer(object):
         batches_per_epoch_val   = int(math.floor(self.image_paths['validation_image_count'] / (batch_size + 0.0)))
 
         # Start Tensorflow session
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.gpu_options.per_process_gpu_memory_fraction = memory_usage
+        with tf.Session(config=config) as sess:
             # Init all variables 
             sess.run(tf.global_variables_initializer())
+            
             # Add the model graph to TensorBoard and print infos
             if WRITE_SUMMARY:
                 writer.add_graph(sess.graph)
+            
             # load the pretrained variables or a checkpoint
             if ckpt_file:
                 saver.restore(sess, ckpt_file)
@@ -245,7 +280,6 @@ class Retrainer(object):
                     
                 test_acc /= test_count
                 print("{} Validation Accuracy = {:.10f}".format(datetime.now(), test_acc))
-                # tf.logging.info('%s: Validation Accuracy = %.10f%%' % (datetime.now(), test_acc))
 
                 # save checkpoint of the model
                 if WRITE_CHECKPOINTS:
