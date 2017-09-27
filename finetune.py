@@ -19,6 +19,8 @@ from tensorflow.python.platform import gfile
 
 # Input params
 VALIDATION_RATIO = 10 # every 5th element = 1/5 = 0.2 = 20%
+USE_SUBFOLDER = True
+SKIP_FOLDER = ['yiwen']
 
 # Learning params
 LEARNING_RATE = 0.005
@@ -104,7 +106,7 @@ def main():
             print 'Image root directory \'%s\' not found' %image_dir
             return None
         else:
-            image_paths = load_image_paths_by_subfolder(image_dir, VALIDATION_RATIO)
+            image_paths = load_image_paths_by_subfolder(image_dir, VALIDATION_RATIO, SKIP_FOLDER, use_subfolder=USE_SUBFOLDER)
     else:
         if not gfile.Exists(image_file):
             print 'Image file \'%s\' not found' %image_file
