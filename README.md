@@ -1,10 +1,12 @@
 # Finetune AlexNet & VGG with Tensorflow
 
 AlexNet and VGG16 model implementations for Tensorflow, with a validation and finetune/retrain script.
+Also includes wrapper model classes to use the Tensorflow Slim implementations of VGG16 and Inception V3.
+Comes with Jupyter notebooks to test the different preprocessing scripts, run a classification and finetune a model using a notebook.
 
 ## Requirements
 
-- Python 2.7
+- Python 2.7 or 3
 - TensorFlow >= 1.13rc0 (I guess everything from version 1.0 on will work)
 - Numpy
 
@@ -13,12 +15,16 @@ AlexNet and VGG16 model implementations for Tensorflow, with a validation and fi
 - `validate.py`: Script to validate the implemented models and the downloaded weights 
 - `finetune.py`: Script to run the finetuning process
 - `helper/*`: Contains helper scripts/classes to load images and run the retraining
-- `models/*`: Contains a parent model class and different model implementations (AlexNet, VGG)
+- `models/*`: Contains a parent model class and different model implementations (AlexNet, VGG, Inception)
 - `images/*`: contains 4 example images, used in the validation script
+- `preprocessing/*`: Contains scripts to run different ways of image preprocessing (crop, resize, ...).
+Some scripts are copied from the [Tensorflow models github repository](https://github.com/tensorflow/models/tree/master/research/slim).
 
 # Weights:
 - AlexNet: http://www.cs.toronto.edu/%7Eguerzhoy/tf_alexnet/bvlc_alexnet.npy
-- VGG: https://mega.nz/a96db891-9e0d-1644-bee9-b2679aa26378
+- VGG16: https://mega.nz/a96db891-9e0d-1644-bee9-b2679aa26378
+- Inception V3 (checkpoint): http://download.tensorflow.org/models/inception_v3_2016_08_28.tar.gz
+- VGG16 (Slim impl. / checkpoint): http://download.tensorflow.org/models/vgg_16_2016_08_28.tar.gz
 
 ## Usage
 
@@ -26,19 +32,20 @@ AlexNet and VGG16 model implementations for Tensorflow, with a validation and fi
 ```
 python validate.py -model alex
 ...
-python validate.py -model vgg
+python validate.py -model [alex, vgg, vgg_slim, inc_v3]
 ```
 
 ### Run finetuning/retraining on selected layers
 ```
 python finetune.py -image_path /path/to/images -model alex
 ...
-python finetune.py -image_path /path/to/images -model vgg
+python finetune.py -image_path /path/to/images -model [alex, vgg, vgg_slim, inc_v3]
+python finetune.py -image_file /path/to/images.txt -model [alex, vgg, vgg_slim, inc_v3]
 ```
 
-`/path/to/image` should point to a folder with a set of sub-folders, each named after one of your final categories and containing only images from that category.
+Using: `-image_path`: `/path/to/images` should point to a folder with a set of sub-folders, each named after one of your final categories and containing only images from that category.
+Using: `-image_file`: `/path/to/images.txt` should be a file with a list of image-paths and labels. 
 
-Another way is to provide a file with a list of image-paths and labels using the `-image_file` argument instead of `-image_path`. 
 e.g.
 ```
 cat /path/to/cat1.jpg

@@ -34,7 +34,7 @@ KEEP_PROB = 1.0 # [0.5]
 FINETUNE_LAYERS = ['fc6', 'fc7', 'fc8']
 
 # HARDWARE USAGE
-DEVICE = '/gpu:0'
+DEVICE = '/cpu:0'
 MEMORY_USAGE = 1.0
 
 
@@ -52,9 +52,9 @@ def finetune(image_paths, ckpt, model_def):
         LEARNING_RATE,
         BATCH_SIZE,
         KEEP_PROB,
-        ckpt,
-        MEMORY_USAGE
-        #, DEVICE
+        MEMORY_USAGE,
+        DEVICE,
+        ckpt
     )
 
 def main():
@@ -99,28 +99,28 @@ def main():
 
     # Load images
     if not image_dir and not image_file:
-        print 'Provide one of the following options to load images \'-image_file\' or \'-image_path\'' %image_dir
+        print('Provide one of the following options to load images \'-image_file\' or \'-image_path\'' %image_dir)
         return None
     elif image_dir: 
         if not gfile.Exists(image_dir):
-            print 'Image root directory \'%s\' not found' %image_dir
+            print('Image root directory \'%s\' not found' %image_dir)
             return None
         else:
             image_paths = load_image_paths_by_subfolder(image_dir, VALIDATION_RATIO, SKIP_FOLDER, use_subfolder=USE_SUBFOLDER)
     else:
         if not gfile.Exists(image_file):
-            print 'Image file \'%s\' not found' %image_file
+            print('Image file \'%s\' not found' %image_file)
             return None
         else:
             image_paths = load_image_paths_by_file(image_file, VALIDATION_RATIO)
 
     # Make sure we have enough images to fill at least one training/validation batch
     if image_paths['training_image_count'] < BATCH_SIZE:
-        print 'Not enough training images in \'%s\'' %image_dir
+        print('Not enough training images in \'%s\'' %image_dir)
         return None
 
     if image_paths['validation_image_count'] < BATCH_SIZE:
-        print 'Not enough validation images in \'%s\'' %image_dir
+        print('Not enough validation images in \'%s\'' %image_dir)
         return None
 
     # Set a CNN model definition

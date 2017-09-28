@@ -4,15 +4,31 @@
 
 import os
 import re
+import glob
 
 import tensorflow as tf
 
 from tensorflow.python.ops import math_ops
-from tensorflow.python.platform import gfile
 from tensorflow.python.framework.ops import convert_to_tensor
 
-FILE_EXT = ['jpg', 'jpeg', 'JPG', 'JPEG']
+FILE_EXT = ['jpg'] # ['jpg', 'jpeg', 'JPG', 'JPEG']
 MEAN = tf.constant([124, 117, 104], dtype=tf.float32) # IMAGENET
+
+def get_images_in_folder(path, skip_folder, use_subfolder):
+    """
+    """
+    images = []
+    for ext in FILE_EXT:
+        pattern = os.path.join(path, '*.' + ext)
+        images += glob.glob(pattern)
+
+    # check subfolder
+    if use_subfolder:
+        for subfolder in os.listdir(path):
+            subfolder_path = os.path.join(path, subfolder)
+            if os.path.isdir(subfolder_path) and not (subfolder in skip_folder):
+                images += get_images_in_folder(subfolder_path, skip_folder, use_subfolder)
+    return images
 
 def load_image_paths_by_subfolder(root_dir, validation_ratio, skip_folder=[], load_as_tensor=True, use_subfolder=False):
     """
@@ -33,37 +49,28 @@ def load_image_paths_by_subfolder(root_dir, validation_ratio, skip_folder=[], lo
     validation_paths = []
     validation_labels = []
         
-    for d in os.listdir(root_dir):
-        pattern = []
-        dir_path = os.path.join(root_dir, d)
-        if not os.path.isdir(dir_path) or d in skip_folder:
+    for folder in os.listdir(root_dir):
+        folder_path = os.path.join(root_dir, folder)
+        if not os.path.isdir(folder_path) or folder in skip_folder:
             continue # skip files and skipped folders
         
-        print 'Looking for images in %s' %d
+        print('Looking for images in %s' %folder)
 
-        if use_subfolder:
-            for sub_dir in os.listdir(dir_path):
-                sub_path = os.path.join(dir_path, sub_dir)
-                if sub_dir not in skip_folder and os.path.isdir(sub_path):
-                    pattern += (os.path.join(sub_path, '*.' + ext) for ext in FILE_EXT)
-
-        # get all image files in this directory
-        pattern += (os.path.join(dir_path, '*.' + ext) for ext in FILE_EXT)
-        image_paths = gfile.Glob(pattern) # Returns a list of paths that match the given pattern
+        image_paths = get_images_in_folder(folder_path, skip_folder, use_subfolder)
         if not image_paths:
-            print '=> No image files found'
+            print('=> No image files found')
             continue # skip empty directories
 
-        print '=> Found %i images' %len(image_paths)
+        print('=> Found %i images' %len(image_paths))
 
         # split the list into traning and validation
-        label = re.sub(r'[^a-z0-9]+', ' ', d.lower())
+        label = re.sub(r'[^a-z0-9]+', ' ', folder.lower())
         image_paths_sub = image_paths[::validation_ratio]
         del image_paths[::validation_ratio]
 
         # print infos
-        print '  => Training: %i' %len(image_paths)
-        print '  => Validation %i' %len(image_paths_sub)
+        print('  => Training: %i' %len(image_paths))
+        print('  => Validation %i' %len(image_paths_sub))
         print('  => Labeling them with: {} ({})'.format(label, len(labels)))
 
         # add entries to the result
@@ -117,16 +124,16 @@ def load_image_paths_by_file(image_file, validation_ratio, load_as_tensor=True):
     validation_paths = []
     validation_labels = []
     for label, image_paths in labeled_paths.items():
-        print 'Images with label \'%s\'' %label
-        print '=> Found %i images' %len(image_paths)
+        print('Images with label \'%s\'' %label)
+        print('=> Found %i images' %len(image_paths))
 
         # split the list into traning and validation
         image_paths_sub = image_paths[::validation_ratio]
         del image_paths[::validation_ratio]
 
         # print infos
-        print '  => Training: %i' %len(image_paths)
-        print '  => Validation %i' %len(image_paths_sub)
+        print('  => Training: %i' %len(image_paths))
+        print('  => Validation %i' %len(image_paths_sub))
 
         # add entries to the result
         labels.append(label)

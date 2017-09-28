@@ -25,6 +25,12 @@ class VGG(Model):
     def get_prediction(self):
         return self.final
 
+    def get_restore_vars(self):
+        return [v for v in tf.global_variables() if not v.name.split('/')[0] in self.retrain_layer]
+
+    def get_retrain_vars(self):
+        return tf.trainable_variables()
+
     def load_initial_weights(self, session):
         self.load_initial_numpy_weights(session)
 

@@ -66,8 +66,9 @@ class Retrainer(object):
             Evaluation operation: defining the accuracy of the model
         """
         with tf.name_scope("accuracy"):
-            prediction = tf.argmax(scores, 1)
-            correct_pred = tf.equal(prediction, tf.argmax(true_classes, 1))
+            predicted_index = tf.argmax(scores, 1)
+            true_index = tf.argmax(true_classes, 1)
+            correct_pred = tf.equal(predicted_index, true_index)
             accuracy_op = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
         return accuracy_op
 
@@ -87,7 +88,7 @@ class Retrainer(object):
             optimizer = tf.train.GradientDescentOptimizer(learning_rate)
             # TODO try another optimizer like like tf.train.RMSPropOptimizer(...)
             # see: https://www.tensorflow.org/versions/r0.12/api_docs/python/train/optimizers
-            train_op = optimizer.minimize(loss)
+            train_op = optimizer.minimize(loss, var_list=train_vars)
             # --> minimize() = combines calls compute_gradients() and apply_gradients()
         return train_op
 
@@ -112,7 +113,7 @@ class Retrainer(object):
 
 
     @staticmethod
-    def print_infos(train_vars, learning_rate, batch_size, keep_prob):
+    def print_infos(train_vars, restore_vars, learning_rate, batch_size, keep_prob):
         """Print infos about the current run
 
         Args:
@@ -122,13 +123,16 @@ class Retrainer(object):
             batch_size:
             keep_prob:
         """
-        print "=> Will train:"
+        print("=> Will Restore:")
+        for var in restore_vars:
+            print("  => {}".format(var))
+        print("=> Will train:")
         for var in train_vars:
             print("  => {}".format(var))
-        print "=> Learningrate: %.4f" %learning_rate
-        print "=> Batchsize: %i" %batch_size
-        print "=> Dropout: %.4f" %(1.0 - keep_prob)
-        print "##################################"
+        print("=> Learningrate: %.4f" %learning_rate)
+        print("=> Batchsize: %i" %batch_size)
+        print("=> Dropout: %.4f" %(1.0 - keep_prob))
+        print("##################################")
 
 
     def parse_data(self, path, label, is_training):
@@ -166,16 +170,7 @@ class Retrainer(object):
     ############################################################################
     # RUNNING THE ACTUAL RETRAINING
     ############################################################################
-    def run_on_device(self, finetune_layers, epochs, learning_rate, batch_size, keep_prob, ckpt_file, memory_usage, device = '/gpu:0'):
-        """
-        Decorator for the run methode, but running it on a given device (like '/gpu:0')
-        Args:
-            device = 
-        """
-        with tf.device(device):
-            self.run(finetune_layers, epochs, learning_rate, batch_size, keep_prob, ckpt_file, memory_usage)
-
-    def run(self, finetune_layers, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, ckpt_file = '', memory_usage = 1.0):
+    def run(self, finetune_layers, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, memory_usage = 1.0, device = '/gpu:0', ckpt_file = ''):
         """
         Run a training on part of the model (retrain/finetune)
 
@@ -202,27 +197,30 @@ class Retrainer(object):
         init_op_train = iterator.make_initializer(data_train)
         init_op_val   = iterator.make_initializer(data_val)
 
-        # TF placeholder for graph input and output
-        ph_in = tf.placeholder(tf.float32, [batch_size, self.model_def.image_size, self.model_def.image_size, 3])
-        ph_out = tf.placeholder(tf.float32, [batch_size, self.num_classes])
-        ph_keep_prob = tf.placeholder(tf.float32)
-
         # Initialize model
-        model = self.model_def(ph_in, keep_prob=ph_keep_prob, num_classes=self.num_classes, retrain_layer=finetune_layers)
-        scores = model.get_prediction()
+        with tf.device(device):
+            # TF placeholder for graph input and output
+            ph_in = tf.placeholder(tf.float32, [batch_size, self.model_def.image_size, self.model_def.image_size, 3])
+            ph_out = tf.placeholder(tf.float32, [batch_size, self.num_classes])
+            ph_keep_prob = tf.placeholder(tf.float32)
+
+            model = self.model_def(ph_in, keep_prob=ph_keep_prob, num_classes=self.num_classes, retrain_layer=finetune_layers)
+            scores = model.get_prediction()
         
         # Get a list with all trainable variables and print infos for the current run
-        train_vars = tf.trainable_variables()
-        self.print_infos(train_vars, learning_rate, batch_size, keep_prob)
+        retrain_vars = model.get_retrain_vars()
+        restore_vars = model.get_restore_vars()
+        self.print_infos(retrain_vars, restore_vars, learning_rate, batch_size, keep_prob)
 
         # Add/Get the different operations to optimize (get the loss, train and validate)
-        loss_op = self.get_loss_op(scores, ph_out)
-        train_op = self.get_train_op(loss_op, learning_rate, train_vars)
-        accuracy_op = self.get_evaluation_op(scores, ph_out)
+        with tf.device(device):
+            loss_op = self.get_loss_op(scores, ph_out)
+            train_op = self.get_train_op(loss_op, learning_rate, retrain_vars)
+            accuracy_op = self.get_evaluation_op(scores, ph_out)
 
         # Create a summery and writter to save it to disc
         if WRITE_SUMMARY:
-            merged_summary, writer = self.get_summary_writer(train_vars, loss_op, accuracy_op)
+            merged_summary, writer = self.get_summary_writer(retrain_vars, loss_op, accuracy_op)
         
         # Initialize a saver to store model checkpoints
         if WRITE_CHECKPOINTS:
@@ -246,7 +244,7 @@ class Retrainer(object):
             # load the pretrained variables or a checkpoint
             if ckpt_file:
                 saver.restore(sess, ckpt_file)
-            else:
+            else: 
                 model.load_initial_weights(sess)
 
             print("{} Start training...".format(datetime.now()))

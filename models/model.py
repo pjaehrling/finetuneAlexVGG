@@ -39,10 +39,13 @@ class Model(object):
 
 
     def get_prediction(self):
-        """
-        """
         raise NotImplementedError("Subclass must implement method")
 
+    def get_restore_vars(self):
+        raise NotImplementedError("Subclass must implement method")
+
+    def get_retrain_vars(self):
+        raise NotImplementedError("Subclass must implement method")
 
     def load_initial_weights(self, session):
         """Load the initial weights
@@ -60,6 +63,7 @@ class Model(object):
         Args:
             session: current tensorflow session
         """
+        print("=> Restoring weights from numpy file: {}".format(self.weights_path))
         # Load the weights into memory
         weights_dict = np.load(self.weights_path, encoding='bytes').item()
 
@@ -87,10 +91,9 @@ class Model(object):
         Args:
             session: current tensorflow session
         """
-        restore_vars = [v for v in slim.get_variables_to_restore() if not v.name.split('/')[1] in self.retrain_layer]
-
+        print("=> Restoring weights from checkpoint: {}".format(self.weights_path))
         # Create and call an operation that reads the network weights from the checkpoint file
-        weight_init_op = slim.assign_from_checkpoint_fn(self.weights_path, restore_vars)
+        weight_init_op = slim.assign_from_checkpoint_fn(self.weights_path, self.get_restore_vars())
         weight_init_op(session)
         # session.run(weight_init_op())
         # TODO any difference in calling it either way?
@@ -117,7 +120,7 @@ class Model(object):
         Returns:
         """
         input_channels = int(tensor.get_shape()[-1])
-        channels_per_layer = input_channels / groups # In case we split the data for multiple parallel conv-layer
+        channels_per_layer = int(input_channels / groups) # In case we split the data for multiple parallel conv-layer
         strides = [1, stride_y, stride_x, 1]
         shape = [filter_height, filter_width, channels_per_layer, num_filters]
         trainable = True if name in self.retrain_layer else False
