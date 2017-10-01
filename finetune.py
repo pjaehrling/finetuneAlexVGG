@@ -18,7 +18,7 @@ from helper.retrainer import Retrainer
 from tensorflow.python.platform import gfile
 
 # Input params
-VALIDATION_RATIO = 10 # every 5th element = 1/5 = 0.2 = 20%
+VALIDATION_RATIO = 5 # every 5th element = 1/5 = 0.2 = 20%
 USE_SUBFOLDER = True
 SKIP_FOLDER = ['yiwen']
 
@@ -26,7 +26,7 @@ SKIP_FOLDER = ['yiwen']
 LEARNING_RATE = 0.005
 # TODO: try learning rate decay
 # see: https://www.tensorflow.org/versions/r0.12/api_docs/python/train/decaying_the_learning_rate
-NUM_EPOCHS = 20
+NUM_EPOCHS = 1
 BATCH_SIZE = 32
 
 # Network params
@@ -38,7 +38,7 @@ DEVICE = '/cpu:0'
 MEMORY_USAGE = 1.0
 
 
-def finetune(image_paths, ckpt, model_def):
+def finetune(image_paths, show_misclassified, ckpt, model_def):
     """
     Args:
         image_paths:
@@ -54,6 +54,7 @@ def finetune(image_paths, ckpt, model_def):
         KEEP_PROB,
         MEMORY_USAGE,
         DEVICE,
+        show_misclassified,
         ckpt
     )
 
@@ -79,6 +80,12 @@ def main():
         help='File with a list of trainings/validation images and their labels'
     )
     parser.add_argument(
+        '-show_misclassified',
+        default=False,
+        help='Folder with trainings/validation images',
+        action='store_true' # whenever this option is set, the arg is set to true
+    )
+    parser.add_argument(
         '-ckpt',
         type=str,
         default='',
@@ -94,6 +101,7 @@ def main():
     args = parser.parse_args()
     image_dir = args.image_dir
     image_file = args.image_file
+    show_misclassified = args.show_misclassified
     ckpt = args.ckpt
     model_str = args.model
 
@@ -134,7 +142,7 @@ def main():
         model_def = AlexNet
 
     # Start retraining/finetuning
-    finetune(image_paths, ckpt, model_def)
+    finetune(image_paths, show_misclassified, ckpt, model_def)
 
 if __name__ == '__main__':
     main()

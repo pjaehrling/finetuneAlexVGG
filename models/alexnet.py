@@ -6,14 +6,14 @@ import tensorflow as tf
 import numpy as np
 
 from models.model import Model
-from preprocessing import bgr_resize_prep
+from preprocessing.imagenet.bgr import resize_crop
 
 class AlexNet(Model):
     """
     AlexNet model definition for Tensorflow
     """
     image_size = 227
-    image_prep = bgr_resize_prep
+    image_prep = resize_crop
 
     def __init__(self, tensor, keep_prob=1.0, num_classes=1000, retrain_layer=[], weights_path='./weights/bvlc_alexnet.npy'):
         # Call the parent class, which will create the graph

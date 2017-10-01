@@ -2,7 +2,7 @@
 # Author: Philipp Jaehrling philipp.jaehrling@gmail.com)
 #
 from models.model import Model
-from preprocessing import resize_prep
+from preprocessing.imagenet import resize_crop
 
 import tensorflow.contrib.slim as slim
 from tensorflow import trainable_variables
@@ -11,10 +11,11 @@ from tensorflow.contrib.slim.python.slim.nets.vgg import vgg_arg_scope
 
 class VGGslim(Model):
     """
-    VGG16 model definition for Tensorflow
+    VGG16 model definition for Tensorflow.
+    All the "fully connected" layers have been transformed to "conv2d" layers in this implementation.
     """
     image_size = vgg_16.default_image_size
-    image_prep = resize_prep
+    image_prep = resize_crop
 
     def __init__(self, tensor, keep_prob=1.0, num_classes=1000, retrain_layer=[], weights_path='./weights/vgg_16.ckpt'):
         # Call the parent class

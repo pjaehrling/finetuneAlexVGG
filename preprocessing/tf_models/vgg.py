@@ -283,15 +283,10 @@ def _aspect_preserving_resize(image, smallest_side):
   return resized_image
 
 
-def preprocess_for_train(image,
-                         output_height,
-                         output_width,
-                         resize_side_min=_RESIZE_SIDE_MIN,
-                         resize_side_max=_RESIZE_SIDE_MAX):
+def preprocess_for_train(image, output_height, output_width, resize_side_min=_RESIZE_SIDE_MIN, resize_side_max=_RESIZE_SIDE_MAX):
   """Preprocesses the given image for training.
 
-  Note that the actual resizing scale is sampled from
-    [`resize_size_min`, `resize_size_max`].
+  Note that the actual resizing scale is sampled from [`resize_size_min`, `resize_size_max`].
 
   Args:
     image: A `Tensor` representing an image of arbitrary size.
@@ -305,8 +300,7 @@ def preprocess_for_train(image,
   Returns:
     A preprocessed image.
   """
-  resize_side = tf.random_uniform(
-      [], minval=resize_side_min, maxval=resize_side_max+1, dtype=tf.int32)
+  resize_side = tf.random_uniform([], minval=resize_side_min, maxval=resize_side_max+1, dtype=tf.int32)
 
   image = _aspect_preserving_resize(image, resize_side)
   image = _random_crop([image], output_height, output_width)[0]
@@ -335,9 +329,7 @@ def preprocess_for_eval(image, output_height, output_width, resize_side):
   return _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
 
 
-def preprocess_image(image, output_height, output_width, is_training=False,
-                     resize_side_min=_RESIZE_SIDE_MIN,
-                     resize_side_max=_RESIZE_SIDE_MAX):
+def preprocess_image(image, output_height, output_width, is_training=False, resize_side_min=_RESIZE_SIDE_MIN, resize_side_max=_RESIZE_SIDE_MAX):
   """Preprocesses the given image.
 
   Args:

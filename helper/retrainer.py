@@ -70,7 +70,7 @@ class Retrainer(object):
             true_index = tf.argmax(true_classes, 1)
             correct_pred = tf.equal(predicted_index, true_index)
             accuracy_op = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-        return accuracy_op
+        return accuracy_op, correct_pred, predicted_index
 
 
     @staticmethod
@@ -95,7 +95,7 @@ class Retrainer(object):
 
     @staticmethod
     def get_loss_op(scores, true_classes):
-        """Inserts the operations we need to calculate the loss.
+        """Inserts the operations which calculates the loss.
 
         Args:
             scores: The new final node that produces results
@@ -134,6 +134,33 @@ class Retrainer(object):
         print("=> Dropout: %.4f" %(1.0 - keep_prob))
         print("##################################")
 
+    
+    def print_misclassified(self, misclassified, labels):
+        """
+        """
+        print("=> Misclassified validation images")
+        for _, (img_path, predicted_label, true_label) in enumerate(misclassified):
+            print("  => {} -> {} ({})".format(
+                img_path,
+                self.image_paths['labels'][predicted_label],
+                self.image_paths['labels'][true_label]
+            ))
+
+
+    def get_misclassified(self, batch_start_index, batch_size, correct_pred, predicted_index, is_validation=True):
+        """
+        """
+        misclassified = []
+        paths = self.image_paths['validation_paths'] if is_validation else self.image_paths['training_paths']
+        labels = self.image_paths['validation_labels'] if is_validation else self.image_paths['training_labels']
+
+        for i in range(batch_size):
+            image_index = batch_start_index + i
+            if not correct_pred[i]:
+                misclassified.append((paths[image_index], predicted_index[i], labels[image_index]))
+
+        return misclassified
+
 
     def parse_data(self, path, label, is_training):
         '''
@@ -165,12 +192,11 @@ class Retrainer(object):
 
     def parse_validation_data(self, path, label):
         return self.parse_data(path, label, False)
-
     
     ############################################################################
     # RUNNING THE ACTUAL RETRAINING
     ############################################################################
-    def run(self, finetune_layers, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, memory_usage = 1.0, device = '/gpu:0', ckpt_file = ''):
+    def run(self, finetune_layers, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, memory_usage = 1.0, device = '/gpu:0', show_misclassified = False, ckpt_file = ''):
         """
         Run a training on part of the model (retrain/finetune)
 
@@ -178,8 +204,14 @@ class Retrainer(object):
             
         """
         # create datasets
-        data_train = Dataset.from_tensor_slices((self.image_paths['training_paths'], self.image_paths['training_labels']))
-        data_val  = Dataset.from_tensor_slices((self.image_paths['validation_paths'], self.image_paths['validation_labels']))
+        data_train = Dataset.from_tensor_slices((
+            tf.convert_to_tensor(self.image_paths['training_paths'], dtype=tf.string),
+            tf.convert_to_tensor(self.image_paths['training_labels'], dtype=tf.int32)
+        ))
+        data_val = Dataset.from_tensor_slices((
+            tf.convert_to_tensor(self.image_paths['validation_paths'], dtype=tf.string),
+            tf.convert_to_tensor(self.image_paths['validation_labels'], dtype=tf.int32)
+        ))
 
         # load and preprocess the images
         data_train = data_train.map(self.parse_train_data)
@@ -216,7 +248,7 @@ class Retrainer(object):
         with tf.device(device):
             loss_op = self.get_loss_op(scores, ph_out)
             train_op = self.get_train_op(loss_op, learning_rate, retrain_vars)
-            accuracy_op = self.get_evaluation_op(scores, ph_out)
+            accuracy_op, correct_pred_op, predicted_index_op = self.get_evaluation_op(scores, ph_out)
 
         # Create a summery and writter to save it to disc
         if WRITE_SUMMARY:
@@ -250,6 +282,8 @@ class Retrainer(object):
             print("{} Start training...".format(datetime.now()))
 
             for epoch in range(epochs):
+                is_last_epoch = True if (epoch+1) == epochs else False
+
                 # ############## TRAINING STEP ##############
                 print("{} Epoch number: {}".format(datetime.now(), epoch + 1))
                 sess.run(init_op_train)
@@ -269,15 +303,23 @@ class Retrainer(object):
                 sess.run(init_op_val)
                 test_acc = 0.
                 test_count = 0
+                misclassified = []
 
-                for _ in range(batches_per_epoch_val):
+                for validation_batch_step in range(batches_per_epoch_val):
                     img_batch, label_batch = sess.run(next_batch)
-                    acc = sess.run(accuracy_op, feed_dict={ph_in: img_batch, ph_out: label_batch, ph_keep_prob: 1.})
+                    acc, correct_pred, predicted_index = sess.run([accuracy_op, correct_pred_op, predicted_index_op], feed_dict={ph_in: img_batch, ph_out: label_batch, ph_keep_prob: 1.})
                     test_acc += acc
                     test_count += 1
                     
+                    if is_last_epoch and show_misclassified:
+                        start = epoch * batches_per_epoch_train + validation_batch_step * batch_size
+                        misclassified += self.get_misclassified(start, batch_size, correct_pred, predicted_index)
+                    
                 test_acc /= test_count
                 print("{} Validation Accuracy = {:.10f}".format(datetime.now(), test_acc))
+
+                if is_last_epoch and show_misclassified:
+                    self.print_misclassified(misclassified)
 
                 # save checkpoint of the model
                 if WRITE_CHECKPOINTS:

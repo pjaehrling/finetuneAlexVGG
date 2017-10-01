@@ -5,7 +5,7 @@ import tensorflow as tf
 import numpy as np
 
 from models.model import Model
-from preprocessing import bgr_resize_prep
+from preprocessing.imagenet.bgr import resize_crop
 
 class VGG(Model):
     """
@@ -13,7 +13,7 @@ class VGG(Model):
     """
 
     image_size = 224
-    image_prep = bgr_resize_prep
+    image_prep = resize_crop
 
     def __init__(self, tensor, keep_prob=1.0, num_classes=1000, retrain_layer=[], weights_path='./weights/vgg16.npy'):
         # Call the parent class, which will create the graph

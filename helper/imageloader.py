@@ -6,13 +6,7 @@ import os
 import re
 import glob
 
-import tensorflow as tf
-
-from tensorflow.python.ops import math_ops
-from tensorflow.python.framework.ops import convert_to_tensor
-
 FILE_EXT = ['jpg'] # ['jpg', 'jpeg', 'JPG', 'JPEG']
-MEAN = tf.constant([124, 117, 104], dtype=tf.float32) # IMAGENET
 
 def get_images_in_folder(path, skip_folder, use_subfolder):
     """
@@ -30,7 +24,7 @@ def get_images_in_folder(path, skip_folder, use_subfolder):
                 images += get_images_in_folder(subfolder_path, skip_folder, use_subfolder)
     return images
 
-def load_image_paths_by_subfolder(root_dir, validation_ratio, skip_folder=[], load_as_tensor=True, use_subfolder=False):
+def load_image_paths_by_subfolder(root_dir, validation_ratio, skip_folder=[], use_subfolder=False):
     """
     Create a list of labeled images, seperated in training and validation sets.
     Will create a new label/class for every sub-directory in the 'root_dir'.
@@ -84,15 +78,15 @@ def load_image_paths_by_subfolder(root_dir, validation_ratio, skip_folder=[], lo
     return {
         'labels': labels,
         'training_image_count': len(training_paths),
-        'training_paths': convert_to_tensor(training_paths, dtype=tf.string) if load_as_tensor else training_paths,
-        'training_labels': convert_to_tensor(training_labels, dtype=tf.int32) if load_as_tensor else training_labels,
+        'training_paths': training_paths,
+        'training_labels': training_labels,
         'validation_image_count': len(validation_paths),
-        'validation_paths': convert_to_tensor(validation_paths, dtype=tf.string) if load_as_tensor else validation_paths,
-        'validation_labels': convert_to_tensor(validation_labels, dtype=tf.int32) if load_as_tensor else validation_labels
+        'validation_paths': validation_paths,
+        'validation_labels': validation_labels
     }
 
 
-def load_image_paths_by_file(image_file, validation_ratio, load_as_tensor=True):
+def load_image_paths_by_file(image_file, validation_ratio):
     """
     Create a list of labeled images, seperated in training and validation sets.
     Reads the given 'image_file' line by line, where every line has the format *label* *image_path*
@@ -146,9 +140,9 @@ def load_image_paths_by_file(image_file, validation_ratio, load_as_tensor=True):
     return {
         'labels': labels,
         'training_image_count': len(training_paths),
-        'training_paths': convert_to_tensor(training_paths, dtype=tf.string) if load_as_tensor else training_paths,
-        'training_labels': convert_to_tensor(training_labels, dtype=tf.int32) if load_as_tensor else training_labels,
+        'training_paths': training_paths,
+        'training_labels': training_labels,
         'validation_image_count': len(validation_paths),
-        'validation_paths': convert_to_tensor(validation_paths, dtype=tf.string) if load_as_tensor else validation_paths,
-        'validation_labels': convert_to_tensor(validation_labels, dtype=tf.int32) if load_as_tensor else validation_labels
+        'validation_paths': validation_paths,
+        'validation_labels': validation_labels
     }
