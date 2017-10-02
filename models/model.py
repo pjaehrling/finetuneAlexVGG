@@ -2,9 +2,7 @@
 # Author: Philipp Jaehrling philipp.jaehrling@gmail.com)
 # Influenced by: https://kratzert.github.io/2017/02/24/finetuning-alexnet-with-tensorflow.html
 #
-import numpy as np
 import tensorflow as tf
-import tensorflow.contrib.slim as slim
 
 #
 # Parent class for models
@@ -26,25 +24,34 @@ class Model(object):
             retrain_layer: list of strings, names of the layers you want to reinitialize
             weights_path: path string, path to the pretrained weights (numpy or checkpoint)
         """
-   
-        # Parse input arguments
         self.tensor = tensor
         self.num_classes = num_classes
         self.keep_prob = keep_prob
         self.retrain_layer = retrain_layer
         self.weights_path = weights_path
-        
-        # Set output to be input be default, will be set in the subclasses
-        self.final = tensor
 
+    def get_final_op(self):
+        """Get the net output (final op)
+            
+        Returns: the last op containing the log predictions and end_points dict
+        """
+        raise NotImplementedError("Subclass must implement method")
 
-    def get_prediction(self):
+    def get_endpoints(self):
+        """Get an ordered dict with all endpoints
+            
+        Returns: ordered endpoints dict
+        """
         raise NotImplementedError("Subclass must implement method")
 
     def get_restore_vars(self):
+        """Get a list of tensors, which should be restored
+        """
         raise NotImplementedError("Subclass must implement method")
 
     def get_retrain_vars(self):
+        """Get a list of tensors, which should be retrained
+        """
         raise NotImplementedError("Subclass must implement method")
 
     def load_initial_weights(self, session):
@@ -54,50 +61,6 @@ class Model(object):
             session: current tensorflow session
         """
         raise NotImplementedError("Subclass must implement method")
-
-
-    def load_initial_numpy_weights(self, session):
-        """Load the initial weights from a numpy file
-        Does not init the layers that we want to retrain
-
-        Args:
-            session: current tensorflow session
-        """
-        print("=> Restoring weights from numpy file: {}".format(self.weights_path))
-        # Load the weights into memory
-        weights_dict = np.load(self.weights_path, encoding='bytes').item()
-
-        # Loop over all layer ops
-        for op_name in weights_dict:
-            # Check if the layer is one of the layers that should be reinitialized
-            if op_name not in self.retrain_layer:
-                with tf.variable_scope(op_name, reuse=True):
-                    # Loop over list of weights/biases and assign them to their corresponding tf variable
-                    for data in weights_dict[op_name]:
-                        # Biases
-                        if len(data.shape) == 1:
-                            var = tf.get_variable('biases', trainable = False)
-                            session.run(var.assign(data)) 
-                        # Weights
-                        else:
-                            var = tf.get_variable('weights', trainable = False)
-                            session.run(var.assign(data))
-
-    
-    def load_initial_checkpoint(self, session):
-        """Load the initial weights from a checkpoint file
-        Does not init the layers that we want to retrain
-
-        Args:
-            session: current tensorflow session
-        """
-        print("=> Restoring weights from checkpoint: {}".format(self.weights_path))
-        # Create and call an operation that reads the network weights from the checkpoint file
-        weight_init_op = slim.assign_from_checkpoint_fn(self.weights_path, self.get_restore_vars())
-        weight_init_op(session)
-        # session.run(weight_init_op())
-        # TODO any difference in calling it either way?
-
 
     ############################################################################
     # LAYER HELPER FUNCTIONS

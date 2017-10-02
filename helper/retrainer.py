@@ -9,7 +9,9 @@ from datetime import datetime
 
 # Tensorflow imports
 import tensorflow as tf
-from tensorflow.contrib.data import Dataset, Iterator
+from tensorflow.contrib.data import Dataset
+
+import helper.ops as ops
 
 # Tensorflow/board params
 WRITE_SUMMARY = False
@@ -25,92 +27,21 @@ class Retrainer(object):
         self.model_def = model_def
         self.image_paths = image_paths
         self.num_classes = len(image_paths['labels'])
-        self.check_paths()
-
+        self.check_tf_ouput_paths()
 
     @staticmethod
-    def check_paths():
+    def check_tf_ouput_paths():
         """Check if the tensorboard and checkpoint path are existent, otherwise create them"""
         if not os.path.isdir(TENSORBOARD_PATH):
             os.mkdir(TENSORBOARD_PATH)
         if not os.path.isdir(CHECKPOINT_PATH):
             os.mkdir(CHECKPOINT_PATH)
 
-
     @staticmethod
-    def get_summary_writer(train_vars, loss, accuracy):
-        """
-        Args:
-            train_vars:
-            loss:
-            accuracy:
-        """
-        for var in train_vars:
-            tf.summary.histogram(var.name, var)
-
-        tf.summary.scalar('cross_entropy', loss)
-        tf.summary.scalar('accuracy', accuracy)
-        merged_summary = tf.summary.merge_all() # Merge all summaries together
-        writer = tf.summary.FileWriter(TENSORBOARD_PATH) # Initialize and return the FileWriter
-        return merged_summary, writer
-
-
-    @staticmethod
-    def get_evaluation_op(scores, true_classes):
-        """Inserts the operations we need to evaluate the accuracy of our results.
-
-        Args:
-            scores: The new final node that produces results
-            true_classes: The node we feed the true classes in
-        Returns:
-            Evaluation operation: defining the accuracy of the model
-        """
-        with tf.name_scope("accuracy"):
-            predicted_index = tf.argmax(scores, 1)
-            true_index = tf.argmax(true_classes, 1)
-            correct_pred = tf.equal(predicted_index, true_index)
-            accuracy_op = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-        return accuracy_op, correct_pred, predicted_index
-
-
-    @staticmethod
-    def get_train_op(loss, learning_rate, train_vars):
-        """Inserts the training operation
-        Creates an optimizer and applies gradient descent to the trainable variables
-
-        Args:
-            loss: the cross entropy mean (scors <> real class)
-            train_vars: list of all trainable variables
-        Returns:
-            Traning/optizing operation
-        """
-        with tf.name_scope("train"):
-            optimizer = tf.train.GradientDescentOptimizer(learning_rate)
-            # TODO try another optimizer like like tf.train.RMSPropOptimizer(...)
-            # see: https://www.tensorflow.org/versions/r0.12/api_docs/python/train/optimizers
-            train_op = optimizer.minimize(loss, var_list=train_vars)
-            # --> minimize() = combines calls compute_gradients() and apply_gradients()
-        return train_op
-
-
-    @staticmethod
-    def get_loss_op(scores, true_classes):
-        """Inserts the operations which calculates the loss.
-
-        Args:
-            scores: The new final node that produces results
-            true_classes: The node we feed the true classes in
-        Returns: loss operation
-        """
-        # Op for calculating the loss
-        with tf.name_scope("cross_entropy"):
-            # softmax_cross_entropy_with_logits 
-            # --> calculates the cross entropy between the softmax score (probaility) and hot encoded class expectation (all "0" except one "1") 
-            # reduce_mean 
-            # --> computes the mean of elements across dimensions of a tensor (cross entropy values here)
-            loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=scores, labels=true_classes))
-        return loss_op
-
+    def save_session_to_checkpoint_file(sess, saver, epoch):
+        checkpoint = os.path.join(CHECKPOINT_PATH, 'model_epoch' + str(epoch+1) + '.ckpt')
+        saver.save(sess, checkpoint)
+        print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint))
 
     @staticmethod
     def print_infos(train_vars, restore_vars, learning_rate, batch_size, keep_prob):
@@ -135,7 +66,7 @@ class Retrainer(object):
         print("##################################")
 
     
-    def print_misclassified(self, misclassified, labels):
+    def print_misclassified(self, misclassified):
         """
         """
         print("=> Misclassified validation images")
@@ -147,8 +78,9 @@ class Retrainer(object):
             ))
 
 
-    def get_misclassified(self, batch_start_index, batch_size, correct_pred, predicted_index, is_validation=True):
+    def get_misclassified(self, batch_start_index, batch_size, predicted_index, is_validation=True):
         """
+        Returns: a list of tupels (imagepath, predicted label, true label)
         """
         misclassified = []
         paths = self.image_paths['validation_paths'] if is_validation else self.image_paths['training_paths']
@@ -156,14 +88,15 @@ class Retrainer(object):
 
         for i in range(batch_size):
             image_index = batch_start_index + i
-            if not correct_pred[i]:
+            if predicted_index[i] != labels[image_index]:
                 misclassified.append((paths[image_index], predicted_index[i], labels[image_index]))
 
         return misclassified
 
 
+
     def parse_data(self, path, label, is_training):
-        '''
+        """
         Args:
             path:
             label:
@@ -172,7 +105,7 @@ class Retrainer(object):
         Returns:
             image: image loaded and preprocesed
             label: converted label number into one-hot-encoding (binary)
-        '''
+        """
         # convert label number into one-hot-encoding
         one_hot = tf.one_hot(label, self.num_classes)
 
@@ -193,76 +126,85 @@ class Retrainer(object):
     def parse_validation_data(self, path, label):
         return self.parse_data(path, label, False)
     
+    def create_dataset(self, is_training=True):
+        """
+        Args:
+            is_training: Define what kind of Dataset should be returned (traning or validation)
+
+        Returns: A Tensorflow Dataset with images and their labels. Either for training or validation.
+        """
+        paths = self.image_paths['training_paths'] if is_training else self.image_paths['validation_paths']
+        labels = self.image_paths['training_labels'] if is_training else self.image_paths['validation_labels']
+        dataset = Dataset.from_tensor_slices((
+            tf.convert_to_tensor(paths, dtype=tf.string),
+            tf.convert_to_tensor(labels, dtype=tf.int32)
+        ))
+        # load and preprocess the images
+        if is_training:
+            dataset = dataset.map(self.parse_train_data)
+        else:
+            dataset = dataset.map(self.parse_validation_data)
+
+        return dataset
+
     ############################################################################
-    # RUNNING THE ACTUAL RETRAINING
-    ############################################################################
-    def run(self, finetune_layers, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, memory_usage = 1.0, device = '/gpu:0', show_misclassified = False, ckpt_file = ''):
+    def run(self, finetune_layers, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, memory_usage = 1.0, 
+            device = '/gpu:0', show_misclassified = False, validate_on_each_epoch = False, ckpt_file = ''):
         """
         Run a training on part of the model (retrain/finetune)
 
         Args:
-            
+            finetune_layers:
+            epochs:
+            learning_rate:
+            batch_size:
+            keep_prob:
+            memory_usage:
+            device:
+            show_misclassified:
+            validate_on_each_epoch:
+            ckpt_file:
         """
         # create datasets
-        data_train = Dataset.from_tensor_slices((
-            tf.convert_to_tensor(self.image_paths['training_paths'], dtype=tf.string),
-            tf.convert_to_tensor(self.image_paths['training_labels'], dtype=tf.int32)
-        ))
-        data_val = Dataset.from_tensor_slices((
-            tf.convert_to_tensor(self.image_paths['validation_paths'], dtype=tf.string),
-            tf.convert_to_tensor(self.image_paths['validation_labels'], dtype=tf.int32)
-        ))
+        data_train = self.create_dataset(is_training=True)
+        data_val = self.create_dataset(is_training=False)
 
-        # load and preprocess the images
-        data_train = data_train.map(self.parse_train_data)
-        data_val   = data_val.map(self.parse_validation_data)
+        # Get ops to init the dataset iterators and get a next batch
+        init_train_iterator_op, init_val_iterator_op, get_next_batch_op = ops.get_dataset_ops(data_train, data_val, batch_size)
 
-        # create a new dataset with batches of images
-        data_train = data_train.batch(batch_size)
-        data_val   = data_val.batch(batch_size)
-
-        # create an reinitializable iterator given the dataset structure
-        iterator = Iterator.from_structure(data_train.output_types, data_train.output_shapes)
-        next_batch = iterator.get_next()
-
-        # Ops for initializing the two different iterators
-        init_op_train = iterator.make_initializer(data_train)
-        init_op_val   = iterator.make_initializer(data_val)
-
-        # Initialize model
+        # Initialize model and create input placeholders
         with tf.device(device):
-            # TF placeholder for graph input and output
-            ph_in = tf.placeholder(tf.float32, [batch_size, self.model_def.image_size, self.model_def.image_size, 3])
-            ph_out = tf.placeholder(tf.float32, [batch_size, self.num_classes])
+            ph_images = tf.placeholder(tf.float32, [batch_size, self.model_def.image_size, self.model_def.image_size, 3])
+            ph_labels = tf.placeholder(tf.float32, [batch_size, self.num_classes])
             ph_keep_prob = tf.placeholder(tf.float32)
 
-            model = self.model_def(ph_in, keep_prob=ph_keep_prob, num_classes=self.num_classes, retrain_layer=finetune_layers)
-            scores = model.get_prediction()
+            model = self.model_def(ph_images, keep_prob=ph_keep_prob, num_classes=self.num_classes, retrain_layer=finetune_layers)
+            final_op = model.get_final_op()
         
         # Get a list with all trainable variables and print infos for the current run
         retrain_vars = model.get_retrain_vars()
         restore_vars = model.get_restore_vars()
         self.print_infos(retrain_vars, restore_vars, learning_rate, batch_size, keep_prob)
 
-        # Add/Get the different operations to optimize (get the loss, train and validate)
+        # Add/Get the different operations to optimize (loss, train and validate)
         with tf.device(device):
-            loss_op = self.get_loss_op(scores, ph_out)
-            train_op = self.get_train_op(loss_op, learning_rate, retrain_vars)
-            accuracy_op, correct_pred_op, predicted_index_op = self.get_evaluation_op(scores, ph_out)
+            loss_op = ops.get_loss_op(final_op, ph_labels)
+            train_op = ops.get_train_op(loss_op, learning_rate, retrain_vars)
+            accuracy_op, predicted_index_op = ops.get_validation_ops(final_op, ph_labels)
 
-        # Create a summery and writter to save it to disc
+        # Create operat
+        summary_op = None
+        writer = None
         if WRITE_SUMMARY:
-            merged_summary, writer = self.get_summary_writer(retrain_vars, loss_op, accuracy_op)
-        
-        # Initialize a saver to store model checkpoints
-        if WRITE_CHECKPOINTS:
-            saver = tf.train.Saver()
+            summary_op, writer = ops.get_summary_writer_op(retrain_vars, loss_op, accuracy_op, TENSORBOARD_PATH)
 
         # Get the number of training/validation steps per epoch to get through all images
         batches_per_epoch_train = int(math.floor(self.image_paths['training_image_count'] / (batch_size + 0.0)))
         batches_per_epoch_val   = int(math.floor(self.image_paths['validation_image_count'] / (batch_size + 0.0)))
+        # TODO: For the leftover images, change shape of the placeholder and use them? (leftovers are not used atm)
 
-        # Start Tensorflow session
+        # Initialize a saver, create a session config and start a session
+        saver = tf.train.Saver()
         config = tf.ConfigProto()
         config.gpu_options.per_process_gpu_memory_fraction = memory_usage
         with tf.Session(config=config) as sess:
@@ -270,61 +212,130 @@ class Retrainer(object):
             sess.run(tf.global_variables_initializer())
             
             # Add the model graph to TensorBoard and print infos
-            if WRITE_SUMMARY:
+            if WRITE_SUMMARY: 
                 writer.add_graph(sess.graph)
             
-            # load the pretrained variables or a checkpoint
+            # Load the pretrained variables or a saved checkpoint
             if ckpt_file:
                 saver.restore(sess, ckpt_file)
             else: 
                 model.load_initial_weights(sess)
 
-            print("{} Start training...".format(datetime.now()))
-
             for epoch in range(epochs):
-                is_last_epoch = True if (epoch+1) == epochs else False
-
-                # ############## TRAINING STEP ##############
                 print("{} Epoch number: {}".format(datetime.now(), epoch + 1))
-                sess.run(init_op_train)
+                is_last_epoch = True if (epoch+1) == epochs else False
+                
+                self.run_training(
+                    sess,
+                    train_op,
+                    init_train_iterator_op,
+                    get_next_batch_op,
+                    ph_images,
+                    ph_labels,
+                    ph_keep_prob,
+                    keep_prob,
+                    batches_per_epoch_train,
+                    epoch,
+                    summary_op,
+                    writer
+                )
 
-                for batch_step in range(batches_per_epoch_train):
-                    # get next batch of data and run the training operation
-                    img_batch, label_batch = sess.run(next_batch)
-                    sess.run(train_op, feed_dict={ph_in: img_batch, ph_out: label_batch, ph_keep_prob: keep_prob})
+                if validate_on_each_epoch or is_last_epoch:
+                    self.run_validation(
+                        sess,
+                        accuracy_op,
+                        predicted_index_op,
+                        init_val_iterator_op,
+                        get_next_batch_op,
+                        ph_images,
+                        ph_labels,
+                        ph_keep_prob,
+                        batches_per_epoch_val,
+                        batch_size,
+                        epoch,
+                        is_last_epoch,
+                        show_misclassified
+                    )
 
-                    if WRITE_SUMMARY and batch_step % DISPLAY_STEP == 0:
-                        # Generate summary with the current batch of data and write to file
-                        summary = sess.run(merged_summary, feed_dict={ph_in: img_batch, ph_out: label_batch, ph_keep_prob: 1.})
-                        writer.add_summary(summary, epoch * batches_per_epoch_train + batch_step)
+                # save session in a checkpoint file
+                if WRITE_CHECKPOINTS or is_last_epoch:
+                    self.save_session_to_checkpoint_file(sess, saver, epoch)
+
+
+    def run_training(self, sess, train_op, iterator_op, get_next_batch_op, ph_images, ph_labels, ph_keep_prob, keep_prob, batches, epoch, summary_op, writer):
+        """
+        Args:
+            sess:
+            train_op:
+            iterator_op:
+            get_next_batch_op:
+            ph_images:
+            ph_labels:
+            ph_keep_prob:
+            keep_prob:
+            batches:
+            epoch:
+            summary_op:
+            writer:
+        """
+        print("{} Start training...".format(datetime.now()))
+        sess.run(iterator_op)
+
+        for batch_step in range(batches):
+            # Get next batch of data and run the training operation
+            img_batch, label_batch = sess.run(get_next_batch_op)
+            sess.run(
+                train_op,
+                feed_dict={ph_images: img_batch, ph_labels: label_batch, ph_keep_prob: keep_prob}
+            )
+
+            if WRITE_SUMMARY and batch_step % DISPLAY_STEP == 0:
+                # Generate summary with the current batch of data and write to file
+                summary = sess.run(summary_op, feed_dict={ph_images: img_batch, ph_labels: label_batch, ph_keep_prob: 1.})
+                writer.add_summary(summary, epoch * batches + batch_step)
+
+
+    def run_validation(self, sess, accuracy_op, predicted_index_op, iterator_op, get_next_batch_op, ph_images, ph_labels, ph_keep_prob, batches, batch_size, epoch, is_last, show_misclassified):
+        """
+        Args:
+            sess:
+            accuracy_op:
+            predicted_index_op:
+            iterator_op:
+            get_next_batch_op:
+            ph_images:
+            ph_labels:
+            ph_keep_prob:
+            batches:
+            batch_size:
+            epoch:
+            is_last:
+            show_misclassified:
+        """
+        # Variables to keep track over different batches
+        test_acc = 0.
+        test_count = 0
+        misclassified = []
+
+        print("{} Start validation...".format(datetime.now()))
+        sess.run(iterator_op)
+
+        for batch_step in range(batches):
+            img_batch, label_batch = sess.run(get_next_batch_op)
+            acc, predicted_index = sess.run(
+                [accuracy_op, predicted_index_op],
+                feed_dict={ph_images: img_batch, ph_labels: label_batch, ph_keep_prob: 1.}
+            )
+            test_acc += acc
+            test_count += 1
+            
+            if is_last and show_misclassified:
+                start_index = epoch * batches + batch_step * batch_size
+                misclassified += self.get_misclassified(start_index, batch_size, predicted_index)
         
-                # ############## VALIDATION STEP ##############
-                print("{} Start validation".format(datetime.now()))
-                sess.run(init_op_val)
-                test_acc = 0.
-                test_count = 0
-                misclassified = []
+        # Calculate the overall validation accuracy
+        test_acc /= test_count
+        print("{} Validation Accuracy = {:.10f}".format(datetime.now(), test_acc))
 
-                for validation_batch_step in range(batches_per_epoch_val):
-                    img_batch, label_batch = sess.run(next_batch)
-                    acc, correct_pred, predicted_index = sess.run([accuracy_op, correct_pred_op, predicted_index_op], feed_dict={ph_in: img_batch, ph_out: label_batch, ph_keep_prob: 1.})
-                    test_acc += acc
-                    test_count += 1
-                    
-                    if is_last_epoch and show_misclassified:
-                        start = epoch * batches_per_epoch_train + validation_batch_step * batch_size
-                        misclassified += self.get_misclassified(start, batch_size, correct_pred, predicted_index)
-                    
-                test_acc /= test_count
-                print("{} Validation Accuracy = {:.10f}".format(datetime.now(), test_acc))
-
-                if is_last_epoch and show_misclassified:
-                    self.print_misclassified(misclassified)
-
-                # save checkpoint of the model
-                if WRITE_CHECKPOINTS:
-                    checkpoint = os.path.join(CHECKPOINT_PATH, 'model_epoch' + str(epoch+1) + '.ckpt')
-                    save_path = saver.save(sess, checkpoint)
-                    print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint))
-
-            print("{} End training...".format(datetime.now()))
+        if is_last and show_misclassified:
+            self.print_misclassified(misclassified)

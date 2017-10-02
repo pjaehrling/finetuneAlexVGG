@@ -52,7 +52,7 @@ def validate(model_def):
 
     # create the model and get scores (pipe to softmax)
     model = model_def(next_element)
-    scores = model.get_prediction()
+    scores = model.get_final_op()
     softmax = tf.nn.softmax(scores)
 
     print 'start validation ...'

@@ -2,11 +2,14 @@
 # Author: Philipp Jaehrling philipp.jaehrling@gmail.com)
 # Influenced by: https://kratzert.github.io/2017/02/24/finetuning-alexnet-with-tensorflow.html
 #
+from collections import OrderedDict
+
 import tensorflow as tf
 import numpy as np
 
 from models.model import Model
 from preprocessing.imagenet.bgr import resize_crop
+from weight_loading.numpyfile import load_weights
 
 class AlexNet(Model):
     """
@@ -20,10 +23,13 @@ class AlexNet(Model):
         Model.__init__(self, tensor, keep_prob, num_classes, retrain_layer, weights_path)
 
         # Call the create function to build the computational graph
-        self.create()
+        self.final, self.endpoints = self.create()
 
-    def get_prediction(self):
+    def get_final_op(self):
         return self.final
+
+    def get_endpoints(self):
+        return self.endpoints
 
     def get_restore_vars(self):
         return [v for v in tf.global_variables() if not v.name.split('/')[0] in self.retrain_layer]
@@ -32,11 +38,11 @@ class AlexNet(Model):
         return tf.trainable_variables()
 
     def load_initial_weights(self, session):
-        self.load_initial_numpy_weights(session)
+        load_weights(session, self.weights_path, self.retrain_layer)
 
     def create(self):
         # 1st Layer: Conv (w ReLu) -> Pool -> Lrn
-        conv1 = self.conv(self.tensor, 11, 11, 96, 4, 4, padding='VALID', name='conv1')
+        conv1 = self.conv(self.tensor, 11, 11, 96, 4, 4, padding='VALID', name='conv1')        
         norm1 = tf.nn.local_response_normalization(conv1, depth_radius=2, alpha=2e-05, beta=0.75, bias=1.0, name='norm1')
         pool1 = tf.nn.max_pool(norm1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID', name='pool1')
     
@@ -66,4 +72,21 @@ class AlexNet(Model):
         dropout7 = tf.nn.dropout(fc7, self.keep_prob)
     
         # 8th Layer: FC and return unscaled activations (for tf.nn.softmax_cross_entropy_with_logits)
-        self.final = self.fc(dropout7, 4096, self.num_classes, relu=False, name='fc8')
+        fc8 = self.fc(dropout7, 4096, self.num_classes, relu=False, name='fc8')
+
+        # add layers to the endpoints dict
+        endpoints = OrderedDict()
+        endpoints['conv1'] = conv1
+        endpoints['pool1'] = pool1
+        endpoints['conv2'] = conv2
+        endpoints['pool2'] = pool2
+        endpoints['conv3'] = conv3
+        endpoints['conv4'] = conv4
+        endpoints['conv5'] = conv5
+        endpoints['pool5'] = pool5
+        endpoints['fc6'] = fc6
+        endpoints['fc7'] = fc7
+        endpoints['fc8'] = fc8
+
+        return fc8, endpoints
+

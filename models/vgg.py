@@ -1,17 +1,19 @@
 #
 # Author: Philipp Jaehrling philipp.jaehrling@gmail.com)
 #
-import tensorflow as tf
+from collections import OrderedDict
+
 import numpy as np
+import tensorflow as tf
 
 from models.model import Model
 from preprocessing.imagenet.bgr import resize_crop
+from weight_loading.numpyfile import load_weights
 
 class VGG(Model):
     """
     VGG16 model definition for Tensorflow
     """
-
     image_size = 224
     image_prep = resize_crop
 
@@ -20,10 +22,13 @@ class VGG(Model):
         Model.__init__(self, tensor, keep_prob, num_classes, retrain_layer, weights_path)
         
         # Call the create function to build the computational graph
-        self.create()
+        self.final, self.endpoints = self.create()
 
-    def get_prediction(self):
+    def get_final_op(self):
         return self.final
+
+    def get_endpoints(self):
+        return self.endpoints
 
     def get_restore_vars(self):
         return [v for v in tf.global_variables() if not v.name.split('/')[0] in self.retrain_layer]
@@ -32,7 +37,7 @@ class VGG(Model):
         return tf.trainable_variables()
 
     def load_initial_weights(self, session):
-        self.load_initial_numpy_weights(session)
+        load_weights(session, self.weights_path, self.retrain_layer)
 
     def create(self):
         # 1st Layer: Conv -> Conv -> Pool
@@ -77,4 +82,29 @@ class VGG(Model):
 
         # 8th Layer: FC
         fc8 = self.fc(dropout2, num_in=4096, num_out=self.num_classes, name='fc8', relu=False)
-        self.final = fc8
+
+        # add layers to the endpoints dict
+        endpoints = OrderedDict()
+        endpoints['conv1/conv1_1'] = conv1_1
+        endpoints['conv1/conv1_2'] = conv1_2
+        endpoints['pool1'] = pool1
+        endpoints['conv2/conv2_1'] = conv2_1
+        endpoints['conv2/conv2_2'] = conv2_2
+        endpoints['pool2'] = pool2
+        endpoints['conv3/conv3_1'] = conv3_1
+        endpoints['conv3/conv3_2'] = conv3_2
+        endpoints['conv3/conv3_3'] = conv3_3
+        endpoints['pool3'] = pool3
+        endpoints['conv4/conv4_1'] = conv4_1
+        endpoints['conv4/conv4_2'] = conv4_2
+        endpoints['conv4/conv4_3'] = conv4_3
+        endpoints['pool4'] = pool4
+        endpoints['conv5/conv5_1'] = conv5_1
+        endpoints['conv5/conv5_2'] = conv5_2
+        endpoints['conv5/conv5_3'] = conv5_3
+        endpoints['pool5'] = pool5
+        endpoints['fc6'] = fc6
+        endpoints['fc7'] = fc7
+        endpoints['fc8'] = fc8
+
+        return fc8, endpoints

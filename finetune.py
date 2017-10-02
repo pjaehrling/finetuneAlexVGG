@@ -38,7 +38,7 @@ DEVICE = '/cpu:0'
 MEMORY_USAGE = 1.0
 
 
-def finetune(image_paths, show_misclassified, ckpt, model_def):
+def finetune(image_paths, show_misclassified, validate_on_each_epoch, ckpt, model_def):
     """
     Args:
         image_paths:
@@ -55,6 +55,7 @@ def finetune(image_paths, show_misclassified, ckpt, model_def):
         MEMORY_USAGE,
         DEVICE,
         show_misclassified,
+        validate_on_each_epoch,
         ckpt
     )
 
@@ -82,7 +83,13 @@ def main():
     parser.add_argument(
         '-show_misclassified',
         default=False,
-        help='Folder with trainings/validation images',
+        help='Show misclassified validateion images at the end',
+        action='store_true' # whenever this option is set, the arg is set to true
+    )
+    parser.add_argument(
+        '-validate_on_each_epoch',
+        default=False,
+        help='Validate the model in each epoch (default is just once at the end',
         action='store_true' # whenever this option is set, the arg is set to true
     )
     parser.add_argument(
@@ -102,6 +109,7 @@ def main():
     image_dir = args.image_dir
     image_file = args.image_file
     show_misclassified = args.show_misclassified
+    validate_on_each_epoch = args.validate_on_each_epoch
     ckpt = args.ckpt
     model_str = args.model
 
@@ -142,7 +150,7 @@ def main():
         model_def = AlexNet
 
     # Start retraining/finetuning
-    finetune(image_paths, show_misclassified, ckpt, model_def)
+    finetune(image_paths, show_misclassified, validate_on_each_epoch, ckpt, model_def)
 
 if __name__ == '__main__':
     main()
