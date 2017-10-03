@@ -25,7 +25,12 @@ class InceptionV3(Model):
         # TODO This implementation has a problem while validation (is still set to training)
         is_training = True if retrain_layer else False
         with slim.arg_scope(inception_v3_arg_scope()):
-            self.final, self.endpoints = inception_v3(self.tensor, num_classes=self.num_classes, is_training=is_training)
+            self.final, self.endpoints = inception_v3(
+                self.tensor,
+                num_classes=self.num_classes,
+                is_training=is_training,
+                dropout_keep_prob=keep_prob
+            )
 
     def get_final_op(self):
         return self.final

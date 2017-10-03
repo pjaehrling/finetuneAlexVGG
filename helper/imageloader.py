@@ -59,8 +59,11 @@ def load_image_paths_by_subfolder(root_dir, validation_ratio, skip_folder=[], us
 
         # split the list into traning and validation
         label = re.sub(r'[^a-z0-9]+', ' ', folder.lower())
-        image_paths_sub = image_paths[::validation_ratio]
-        del image_paths[::validation_ratio]
+        if (validation_ratio > 0):
+            image_paths_sub = image_paths[::validation_ratio]
+            del image_paths[::validation_ratio]
+        else:
+            image_paths_sub = []
 
         # print infos
         print('  => Training: %i' %len(image_paths))
@@ -122,8 +125,11 @@ def load_image_paths_by_file(image_file, validation_ratio):
         print('=> Found %i images' %len(image_paths))
 
         # split the list into traning and validation
-        image_paths_sub = image_paths[::validation_ratio]
-        del image_paths[::validation_ratio]
+        if (validation_ratio > 0):
+            image_paths_sub = image_paths[::validation_ratio]
+            del image_paths[::validation_ratio]
+        else:
+            image_paths_sub = []
 
         # print infos
         print('  => Training: %i' %len(image_paths))

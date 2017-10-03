@@ -93,8 +93,6 @@ class Retrainer(object):
 
         return misclassified
 
-
-
     def parse_data(self, path, label, is_training):
         """
         Args:
@@ -330,7 +328,7 @@ class Retrainer(object):
             test_count += 1
             
             if is_last and show_misclassified:
-                start_index = epoch * batches + batch_step * batch_size
+                start_index =  batch_step * batch_size
                 misclassified += self.get_misclassified(start_index, batch_size, predicted_index)
         
         # Calculate the overall validation accuracy

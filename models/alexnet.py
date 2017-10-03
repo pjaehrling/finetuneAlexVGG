@@ -84,6 +84,7 @@ class AlexNet(Model):
         endpoints['conv4'] = conv4
         endpoints['conv5'] = conv5
         endpoints['pool5'] = pool5
+        endpoints['pool5/flat'] = pool5_flat
         endpoints['fc6'] = fc6
         endpoints['fc7'] = fc7
         endpoints['fc8'] = fc8

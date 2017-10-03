@@ -1,12 +1,8 @@
 #
 # Author: Philipp Jaehrling
-# Influenced by: 
-# - https://kratzert.github.io/2017/02/24/finetuning-alexnet-with-tensorflow.html
-# - https://kratzert.github.io/2017/06/15/example-of-tensorflows-new-input-pipeline.html
 #
-
+import os
 import argparse
-import tensorflow as tf
 
 from models.alexnet import AlexNet
 from models.vgg import VGG
@@ -15,10 +11,8 @@ from models.inception_v3 import InceptionV3
 from helper.imageloader import load_image_paths_by_subfolder, load_image_paths_by_file
 from helper.retrainer import Retrainer
 
-from tensorflow.python.platform import gfile
-
 # Input params
-VALIDATION_RATIO = 5 # every 5th element = 1/5 = 0.2 = 20%
+VALIDATION_RATIO = 5 # e.g. 5 -> every 5th element = 1/5 = 0.2 = 20%
 USE_SUBFOLDER = True
 SKIP_FOLDER = ['yiwen']
 
@@ -63,9 +57,6 @@ def main():
     """
     Main
     """
-    # Make sure the logging output is visible.
-    tf.logging.set_verbosity(tf.logging.INFO)
-
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -118,13 +109,13 @@ def main():
         print('Provide one of the following options to load images \'-image_file\' or \'-image_path\'' %image_dir)
         return None
     elif image_dir: 
-        if not gfile.Exists(image_dir):
+        if not os.path.exists(image_dir):
             print('Image root directory \'%s\' not found' %image_dir)
             return None
         else:
             image_paths = load_image_paths_by_subfolder(image_dir, VALIDATION_RATIO, SKIP_FOLDER, use_subfolder=USE_SUBFOLDER)
     else:
-        if not gfile.Exists(image_file):
+        if not os.path.exists(image_file):
             print('Image file \'%s\' not found' %image_file)
             return None
         else:
