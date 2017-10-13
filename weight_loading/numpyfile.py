@@ -16,9 +16,11 @@ def load_weights(session, weights_path, retrain_vars):
     weights_dict = np.load(weights_path, encoding='bytes').item()
     # Loop over all layer ops
     for op_name in weights_dict:
+        op_name_string = op_name if isinstance(op_name, str) else op_name.decode('utf8')
+
         # Check if the layer is one of the layers that should be reinitialized
-        if op_name not in retrain_vars:
-            with tf.variable_scope(op_name, reuse=True):
+        if op_name_string not in retrain_vars:
+            with tf.variable_scope(op_name_string, reuse=True):
                 # Loop over list of weights/biases and assign them to their corresponding tf variable
                 for data in weights_dict[op_name]:
                     # Biases

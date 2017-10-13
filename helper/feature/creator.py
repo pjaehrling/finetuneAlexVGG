@@ -12,21 +12,48 @@ class FeatureCreator(object):
     """
     """
 
-    def __init__(self, model_def, image_paths, feature_dir):
+    def __init__(self, model_def, feature_dir, image_paths, image_labels, label_dict):
         self.model_def = model_def
-        self.feature_dir = feature_dir
         self.image_paths = image_paths
-        self.feature_paths = [self.get_feature_path(p) for p in image_paths]
-        self.count = len(image_paths)
+        self.count = len(self.image_paths)
 
-    def get_feature_path(self, image_path):
+        # Create a list with feature paths (image -> feat)
+        self.feature_paths = []
+        for i, image_path in enumerate(image_paths):
+            label = label_dict[image_labels[i]]
+            feature_path = self.get_feature_path(feature_dir, image_path, label)
+            self.feature_paths.append(feature_path)
+
+        self.write_mapping_file(feature_dir)
+
+    @staticmethod
+    def get_feature_path(feature_dir, image_path, label):
         """
         Args:
             image_path
         """
+        feature_dir = os.path.join(feature_dir, label)
+        if not os.path.exists(feature_dir):
+            os.makedirs(feature_dir)
+
         hashed_path = hashlib.md5(image_path.encode()).hexdigest()
-        bn_path = os.path.join(self.feature_dir, hashed_path + '.txt')
+        bn_path = os.path.join(feature_dir, hashed_path + '.txt')
         return bn_path
+
+    def write_mapping_file(self, path):
+        """
+        """
+        mappings = []
+        for i, image_path in enumerate(self.image_paths):
+            feature_path = self.feature_paths[i]
+            mapping = "{} -> {}".format(image_path, feature_path)
+            mappings.append(mapping)
+
+        
+        mapping_path = os.path.join(path, 'mapping.txt')
+        mapping_file = open(mapping_path, "w")
+        mapping_file.write('\n'.join(mappings))
+        mapping_file.close()
 
     def parse_data(self, img_path, feat_path, use_train_prep):
         """
@@ -89,7 +116,7 @@ class FeatureCreator(object):
             feat = sess.run(feat_tensor, feed_dict={ph_image: [image]} )
 
             feat_flat = feat.flatten()
-            feat_string = ','.join(str(x) for x in feat_flat)
+            feat_string = '\n'.join(str(x) for x in feat_flat)
             with open(feat_path, 'w') as feat_file:
                 feat_file.write(feat_string)
 

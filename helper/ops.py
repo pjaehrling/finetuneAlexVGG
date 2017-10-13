@@ -76,7 +76,7 @@ def get_summary_writer_op(train_vars, loss, accuracy, path):
 def get_dataset_ops(data_train, data_val, batch_size):
     """
     """
-    # create a new dataset with batches of images
+    # create a new dataset with batches
     data_train = data_train.batch(batch_size)
     data_val   = data_val.batch(batch_size)
 

@@ -3,45 +3,29 @@
 # Influenced by: https://kratzert.github.io/2017/02/24/finetuning-alexnet-with-tensorflow.html
 #
 
-import os
 import math
 from datetime import datetime
 
-# Tensorflow imports
 import tensorflow as tf
 from tensorflow.contrib.data import Dataset
 
 import helper.ops as ops
-
-# Tensorflow/board params
-WRITE_SUMMARY = False
-WRITE_CHECKPOINTS = False
-DISPLAY_STEP = 20 # How often to write the tf.summary
-TENSORBOARD_PATH = "../tensorboard"
-CHECKPOINT_PATH = "../checkpoints"
-
+import helper.utils as utils
 
 class Retrainer(object):
+    """
+    Retrain (Finetune) a given model on a new set of categories 
+    """
 
-    def __init__(self, model_def, image_paths):
+    def __init__(self, model_def, data, write_summary = False, summary_step = 1, summary_path = '', write_checkpoints = False):
         self.model_def = model_def
-        self.image_paths = image_paths
-        self.num_classes = len(image_paths['labels'])
-        self.check_tf_ouput_paths()
+        self.data = data
+        self.num_classes = len(data['labels'])
 
-    @staticmethod
-    def check_tf_ouput_paths():
-        """Check if the tensorboard and checkpoint path are existent, otherwise create them"""
-        if not os.path.isdir(TENSORBOARD_PATH):
-            os.mkdir(TENSORBOARD_PATH)
-        if not os.path.isdir(CHECKPOINT_PATH):
-            os.mkdir(CHECKPOINT_PATH)
-
-    @staticmethod
-    def save_session_to_checkpoint_file(sess, saver, epoch):
-        checkpoint = os.path.join(CHECKPOINT_PATH, 'model_epoch' + str(epoch+1) + '.ckpt')
-        saver.save(sess, checkpoint)
-        print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint))
+        self.write_summary = write_summary
+        self.summary_step = summary_step
+        self.summary_path = summary_path
+        self.write_checkpoints = write_checkpoints
 
     @staticmethod
     def print_infos(train_vars, restore_vars, learning_rate, batch_size, keep_prob):
@@ -64,34 +48,6 @@ class Retrainer(object):
         print("=> Batchsize: %i" %batch_size)
         print("=> Dropout: %.4f" %(1.0 - keep_prob))
         print("##################################")
-
-    
-    def print_misclassified(self, misclassified):
-        """
-        """
-        print("=> Misclassified validation images")
-        for _, (img_path, predicted_label, true_label) in enumerate(misclassified):
-            print("  => {} -> {} ({})".format(
-                img_path,
-                self.image_paths['labels'][predicted_label],
-                self.image_paths['labels'][true_label]
-            ))
-
-
-    def get_misclassified(self, batch_start_index, batch_size, predicted_index, is_validation=True):
-        """
-        Returns: a list of tupels (imagepath, predicted label, true label)
-        """
-        misclassified = []
-        paths = self.image_paths['validation_paths'] if is_validation else self.image_paths['training_paths']
-        labels = self.image_paths['validation_labels'] if is_validation else self.image_paths['training_labels']
-
-        for i in range(batch_size):
-            image_index = batch_start_index + i
-            if predicted_index[i] != labels[image_index]:
-                misclassified.append((paths[image_index], predicted_index[i], labels[image_index]))
-
-        return misclassified
 
     def parse_data(self, path, label, is_training):
         """
@@ -131,8 +87,8 @@ class Retrainer(object):
 
         Returns: A Tensorflow Dataset with images and their labels. Either for training or validation.
         """
-        paths = self.image_paths['training_paths'] if is_training else self.image_paths['validation_paths']
-        labels = self.image_paths['training_labels'] if is_training else self.image_paths['validation_labels']
+        paths = self.data['training_paths'] if is_training else self.data['validation_paths']
+        labels = self.data['training_labels'] if is_training else self.data['validation_labels']
         dataset = Dataset.from_tensor_slices((
             tf.convert_to_tensor(paths, dtype=tf.string),
             tf.convert_to_tensor(labels, dtype=tf.int32)
@@ -147,7 +103,7 @@ class Retrainer(object):
 
     ############################################################################
     def run(self, finetune_layers, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, memory_usage = 1.0, 
-            device = '/gpu:0', show_misclassified = False, validate_on_each_epoch = False, ckpt_file = ''):
+            device = '/gpu:0', show_misclassified = False, validate_on_each_epoch = False, save_ckpt_dir = '', init_ckpt_file = ''):
         """
         Run a training on part of the model (retrain/finetune)
 
@@ -161,7 +117,8 @@ class Retrainer(object):
             device:
             show_misclassified:
             validate_on_each_epoch:
-            ckpt_file:
+            save_ckpt_dir:
+            init_ckpt_file:
         """
         # create datasets
         data_train = self.create_dataset(is_training=True)
@@ -193,12 +150,12 @@ class Retrainer(object):
         # Create operat
         summary_op = None
         writer = None
-        if WRITE_SUMMARY:
-            summary_op, writer = ops.get_summary_writer_op(retrain_vars, loss_op, accuracy_op, TENSORBOARD_PATH)
+        if self.write_summary:
+            summary_op, writer = ops.get_summary_writer_op(retrain_vars, loss_op, accuracy_op, self.summary_path)
 
         # Get the number of training/validation steps per epoch to get through all images
-        batches_per_epoch_train = int(math.floor(self.image_paths['training_image_count'] / (batch_size + 0.0)))
-        batches_per_epoch_val   = int(math.floor(self.image_paths['validation_image_count'] / (batch_size + 0.0)))
+        batches_per_epoch_train = int(math.floor(self.data['training_count'] / (batch_size + 0.0)))
+        batches_per_epoch_val   = int(math.floor(self.data['validation_count'] / (batch_size + 0.0)))
         # TODO: For the leftover images, change shape of the placeholder and use them? (leftovers are not used atm)
 
         # Initialize a saver, create a session config and start a session
@@ -210,12 +167,12 @@ class Retrainer(object):
             sess.run(tf.global_variables_initializer())
             
             # Add the model graph to TensorBoard and print infos
-            if WRITE_SUMMARY: 
+            if self.write_summary: 
                 writer.add_graph(sess.graph)
             
             # Load the pretrained variables or a saved checkpoint
-            if ckpt_file:
-                saver.restore(sess, ckpt_file)
+            if init_ckpt_file:
+                saver.restore(sess, init_ckpt_file)
             else: 
                 model.load_initial_weights(sess)
 
@@ -223,7 +180,7 @@ class Retrainer(object):
                 print("{} Epoch number: {}".format(datetime.now(), epoch + 1))
                 is_last_epoch = True if (epoch+1) == epochs else False
                 
-                self.run_training(
+                utils.run_training(
                     sess,
                     train_op,
                     init_train_iterator_op,
@@ -234,12 +191,14 @@ class Retrainer(object):
                     keep_prob,
                     batches_per_epoch_train,
                     epoch,
+                    self.write_summary,
                     summary_op,
-                    writer
+                    writer,
+                    self.summary_step
                 )
 
                 if validate_on_each_epoch or is_last_epoch:
-                    self.run_validation(
+                    utils.run_validation(
                         sess,
                         accuracy_op,
                         predicted_index_op,
@@ -252,88 +211,10 @@ class Retrainer(object):
                         batch_size,
                         epoch,
                         is_last_epoch,
-                        show_misclassified
+                        show_misclassified,
+                        self.data
                     )
 
                 # save session in a checkpoint file
-                if WRITE_CHECKPOINTS or is_last_epoch:
-                    self.save_session_to_checkpoint_file(sess, saver, epoch)
-
-
-    def run_training(self, sess, train_op, iterator_op, get_next_batch_op, ph_images, ph_labels, ph_keep_prob, keep_prob, batches, epoch, summary_op, writer):
-        """
-        Args:
-            sess:
-            train_op:
-            iterator_op:
-            get_next_batch_op:
-            ph_images:
-            ph_labels:
-            ph_keep_prob:
-            keep_prob:
-            batches:
-            epoch:
-            summary_op:
-            writer:
-        """
-        print("{} Start training...".format(datetime.now()))
-        sess.run(iterator_op)
-
-        for batch_step in range(batches):
-            # Get next batch of data and run the training operation
-            img_batch, label_batch = sess.run(get_next_batch_op)
-            sess.run(
-                train_op,
-                feed_dict={ph_images: img_batch, ph_labels: label_batch, ph_keep_prob: keep_prob}
-            )
-
-            if WRITE_SUMMARY and batch_step % DISPLAY_STEP == 0:
-                # Generate summary with the current batch of data and write to file
-                summary = sess.run(summary_op, feed_dict={ph_images: img_batch, ph_labels: label_batch, ph_keep_prob: 1.})
-                writer.add_summary(summary, epoch * batches + batch_step)
-
-
-    def run_validation(self, sess, accuracy_op, predicted_index_op, iterator_op, get_next_batch_op, ph_images, ph_labels, ph_keep_prob, batches, batch_size, epoch, is_last, show_misclassified):
-        """
-        Args:
-            sess:
-            accuracy_op:
-            predicted_index_op:
-            iterator_op:
-            get_next_batch_op:
-            ph_images:
-            ph_labels:
-            ph_keep_prob:
-            batches:
-            batch_size:
-            epoch:
-            is_last:
-            show_misclassified:
-        """
-        # Variables to keep track over different batches
-        test_acc = 0.
-        test_count = 0
-        misclassified = []
-
-        print("{} Start validation...".format(datetime.now()))
-        sess.run(iterator_op)
-
-        for batch_step in range(batches):
-            img_batch, label_batch = sess.run(get_next_batch_op)
-            acc, predicted_index = sess.run(
-                [accuracy_op, predicted_index_op],
-                feed_dict={ph_images: img_batch, ph_labels: label_batch, ph_keep_prob: 1.}
-            )
-            test_acc += acc
-            test_count += 1
-            
-            if is_last and show_misclassified:
-                start_index =  batch_step * batch_size
-                misclassified += self.get_misclassified(start_index, batch_size, predicted_index)
-        
-        # Calculate the overall validation accuracy
-        test_acc /= test_count
-        print("{} Validation Accuracy = {:.10f}".format(datetime.now(), test_acc))
-
-        if is_last and show_misclassified:
-            self.print_misclassified(misclassified)
+                if self.write_checkpoints or is_last_epoch:
+                    utils.save_session_to_checkpoint_file(sess, saver, epoch, save_ckpt_dir)

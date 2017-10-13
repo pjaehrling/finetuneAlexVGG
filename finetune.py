@@ -3,12 +3,12 @@
 #
 import os
 import argparse
+import helper.data_provider as data_provider
 
 from models.alexnet import AlexNet
 from models.vgg import VGG
 from models.vgg_slim import VGGslim
 from models.inception_v3 import InceptionV3
-from helper.imageloader import load_image_paths_by_subfolder, load_image_paths_by_file
 from helper.retrainer import Retrainer
 
 # Input params
@@ -26,20 +26,29 @@ BATCH_SIZE = 32
 # Network params
 KEEP_PROB = 1.0 # [0.5]
 FINETUNE_LAYERS = ['fc6', 'fc7', 'fc8']
+CHECKPOINT_DIR = '../checkpoints'
 
 # HARDWARE USAGE
-DEVICE = '/cpu:0'
+DEVICE = '/gpu:0'
 MEMORY_USAGE = 1.0
 
+# Tensorboard/Summary params
+WRITE_SUMMARY = False
+SUMMARY_STEP = 20 # How often to write the tf.summary
+SUMMARY_PATH = "../tensorboard"
 
-def finetune(image_paths, show_misclassified, validate_on_each_epoch, ckpt, model_def):
+def finetune(model_def, data, show_misclassified, validate_on_each_epoch, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt):
     """
     Args:
-        image_paths:
-        ckpt:
         model_def:
+        data:
+        show_misclassified:
+        validate_on_each_epoch:
+        ckpt_dir:
+        write_checkpoint_on_each_epoch:
+        init_from_ckpt:
     """
-    trainer = Retrainer(model_def, image_paths)
+    trainer = Retrainer(model_def, data, WRITE_SUMMARY, SUMMARY_STEP, SUMMARY_PATH, write_checkpoint_on_each_epoch)
     trainer.run(
         FINETUNE_LAYERS,
         NUM_EPOCHS,
@@ -50,7 +59,8 @@ def finetune(image_paths, show_misclassified, validate_on_each_epoch, ckpt, mode
         DEVICE,
         show_misclassified,
         validate_on_each_epoch,
-        ckpt
+        ckpt_dir,
+        init_from_ckpt
     )
 
 def main():
@@ -80,11 +90,17 @@ def main():
     parser.add_argument(
         '-validate_on_each_epoch',
         default=False,
-        help='Validate the model in each epoch (default is just once at the end',
+        help='Validate the model in each epoch (default is just once at the end)',
         action='store_true' # whenever this option is set, the arg is set to true
     )
     parser.add_argument(
-        '-ckpt',
+        '-write_checkpoint_on_each_epoch',
+        default=False,
+        help='Write a checkpoint file on each epoch (default is just once at the end',
+        action='store_true' # whenever this option is set, the arg is set to true
+    )
+    parser.add_argument(
+        '-init_from_ckpt',
         type=str,
         default='',
         help='Load this checkpoint file to continue training from this point on'
@@ -101,32 +117,33 @@ def main():
     image_file = args.image_file
     show_misclassified = args.show_misclassified
     validate_on_each_epoch = args.validate_on_each_epoch
-    ckpt = args.ckpt
+    write_checkpoint_on_each_epoch = = args.write_checkpoint_on_each_epoch
+    init_from_ckpt = args.init_from_ckpt
     model_str = args.model
 
     # Load images
     if not image_dir and not image_file:
-        print('Provide one of the following options to load images \'-image_file\' or \'-image_path\'' %image_dir)
+        print('Provide one of the following options to load images \'-image_file\' or \'-image_dir\'')
         return None
     elif image_dir: 
         if not os.path.exists(image_dir):
             print('Image root directory \'%s\' not found' %image_dir)
             return None
         else:
-            image_paths = load_image_paths_by_subfolder(image_dir, VALIDATION_RATIO, SKIP_FOLDER, use_subfolder=USE_SUBFOLDER)
+            data = data_provider.load_images_by_subfolder(image_dir, VALIDATION_RATIO, SKIP_FOLDER, use_subfolder=USE_SUBFOLDER)
     else:
         if not os.path.exists(image_file):
             print('Image file \'%s\' not found' %image_file)
             return None
         else:
-            image_paths = load_image_paths_by_file(image_file, VALIDATION_RATIO)
+            data = data_provider.load_by_file(image_file, VALIDATION_RATIO)
 
     # Make sure we have enough images to fill at least one training/validation batch
-    if image_paths['training_image_count'] < BATCH_SIZE:
+    if data['training_count'] < BATCH_SIZE:
         print('Not enough training images in \'%s\'' %image_dir)
         return None
 
-    if image_paths['validation_image_count'] < BATCH_SIZE:
+    if data['validation_count'] < BATCH_SIZE:
         print('Not enough validation images in \'%s\'' %image_dir)
         return None
 
@@ -140,8 +157,13 @@ def main():
     elif model_str == 'alex': # default
         model_def = AlexNet
 
+    # Make sure the checkpoint dir exists
+    ckpt_dir = os.path.join(CHECKPOINT_DIR, model_str)
+    if not os.path.exists(ckpt_dir):
+        os.makedirs(ckpt_dir)
+
     # Start retraining/finetuning
-    finetune(image_paths, show_misclassified, validate_on_each_epoch, ckpt, model_def)
+    finetune(model_def, data, show_misclassified, validate_on_each_epoch, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt)
 
 if __name__ == '__main__':
     main()
