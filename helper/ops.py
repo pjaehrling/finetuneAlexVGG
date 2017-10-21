@@ -19,9 +19,10 @@ def get_validation_ops(scores, true_classes):
     return accuracy_op, predicted_index
 
 
-def get_train_op(loss, learning_rate, train_vars):
+def get_train_op(loss, learning_rate, train_vars, use_adam_optimizer=False):
     """Inserts the training operation
     Creates an optimizer and applies gradient descent to the trainable variables
+    Check: https://www.tensorflow.org/versions/r0.12/api_docs/python/train/optimizers
 
     Args:
         loss: the cross entropy mean (scors <> real class)
@@ -30,9 +31,11 @@ def get_train_op(loss, learning_rate, train_vars):
         Traning/optizing operation
     """
     with tf.name_scope("train"):
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate)
-        # TODO try another optimizer like like tf.train.RMSPropOptimizer(...)
-        # see: https://www.tensorflow.org/versions/r0.12/api_docs/python/train/optimizers
+        if use_adam_optimizer:
+            optimizer = tf.train.AdamOptimizer(learning_rate)
+        else:
+            optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+
         train_op = optimizer.minimize(loss, var_list=train_vars)
         # --> minimize() = combines calls compute_gradients() and apply_gradients()
     return train_op
@@ -73,10 +76,14 @@ def get_summary_writer_op(train_vars, loss, accuracy, path):
     return merged_summary, writer
 
 
-def get_dataset_ops(data_train, data_val, batch_size):
+def get_dataset_ops(data_train, data_val, batch_size, train_size, val_size, shuffle=True):
     """
     """
-    # create a new dataset with batches
+    # shuffle the dataset and create batches
+    if shuffle:
+        data_train = data_train.shuffle(train_size)
+        data_val   = data_val.shuffle(val_size)
+    
     data_train = data_train.batch(batch_size)
     data_val   = data_val.batch(batch_size)
 
