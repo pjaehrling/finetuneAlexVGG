@@ -10,7 +10,7 @@ def load_weights(session, weights_path, retrain_vars):
         weights_path:
         retrain_vars:
     """
-    print("=> Restoring weights from numpy file: {}".format(weights_path))
+    print("Info: Restoring weights from numpy file: {}".format(weights_path))
    
     # Load the weights into memory
     weights_dict = np.load(weights_path, encoding='bytes').item()
@@ -20,6 +20,7 @@ def load_weights(session, weights_path, retrain_vars):
 
         # Check if the layer is one of the layers that should be reinitialized
         if op_name_string not in retrain_vars:
+            print("  restore: {}".format(op_name_string))
             with tf.variable_scope(op_name_string, reuse=True):
                 # Loop over list of weights/biases and assign them to their corresponding tf variable
                 for data in weights_dict[op_name]:
@@ -31,3 +32,7 @@ def load_weights(session, weights_path, retrain_vars):
                     else:
                         var = tf.get_variable('weights', trainable = False)
                         session.run(var.assign(data))
+        else:
+            print("  skip: {}".format(op_name_string))
+    
+    print("")

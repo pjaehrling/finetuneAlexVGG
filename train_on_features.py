@@ -14,7 +14,7 @@ SKIP_FOLDER = ['yiwen']
 
 # Learning params
 LEARNING_RATE = 0.005
-NUM_EPOCHS = 20
+NUM_EPOCHS = 10
 BATCH_SIZE = 32
 
 # Network params
@@ -22,20 +22,20 @@ KEEP_PROB = 1.0 # [0.5]
 CHECKPOINT_DIR = '../checkpoints/features'
 
 # HARDWARE USAGE
-DEVICE = '/gpu:0'
+DEVICE = '/cpu:0'
 MEMORY_USAGE = 1.0
 
-def train(data, layer_inputs, show_misclassified, validate_on_each_epoch, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt, use_adam_optimizer):
+def train(data, layer_inputs, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt, use_adam_optimizer):
     """
     Args:
-        model_def:
         data:
-        show_misclassified:
-        validate_on_each_epoch:
+        layer_input:
         ckpt_dir:
         write_checkpoint_on_each_epoch:
         init_from_ckpt:
+        use_adam_optimizer:
     """
+    # TODO: Get the input shape by looking at one file
     # f = open('foo.txt', 'r')
     # f.readlines()
 
@@ -48,8 +48,6 @@ def train(data, layer_inputs, show_misclassified, validate_on_each_epoch, ckpt_d
         KEEP_PROB,
         MEMORY_USAGE,
         DEVICE,
-        show_misclassified,
-        validate_on_each_epoch,
         ckpt_dir,
         init_from_ckpt,
         use_adam_optimizer
@@ -83,18 +81,6 @@ def main():
         help='File with a list of trainings/validation features and their labels'
     )
     parser.add_argument(
-        '-show_misclassified',
-        default=False,
-        help='Show misclassified validateion images at the end',
-        action='store_true' # whenever this option is set, the arg is set to true
-    )
-    parser.add_argument(
-        '-validate_on_each_epoch',
-        default=False,
-        help='Validate the model in each epoch (default is just once at the end)',
-        action='store_true' # whenever this option is set, the arg is set to true
-    )
-    parser.add_argument(
         '-write_checkpoint_on_each_epoch',
         default=False,
         help='Write a checkpoint file on each epoch (default is just once at the end',
@@ -117,8 +103,6 @@ def main():
     layer_inputs = args.layer_inputs
     feature_dir = args.feature_dir
     feature_file = args.feature_file
-    show_misclassified = args.show_misclassified
-    validate_on_each_epoch = args.validate_on_each_epoch
     write_checkpoint_on_each_epoch = args.write_checkpoint_on_each_epoch
     init_from_ckpt = args.init_from_ckpt
     use_adam_optimizer = args.use_adam_optimizer
@@ -155,7 +139,7 @@ def main():
         os.makedirs(ckpt_dir)
 
     # Start retraining/finetuning
-    train(data, layer_inputs, show_misclassified, validate_on_each_epoch, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt, use_adam_optimizer)
+    train(data, layer_inputs, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt, use_adam_optimizer)
 
 if __name__ == '__main__':
     main()

@@ -9,7 +9,8 @@ def load_weights(session, weights_path, restore_vars):
         weights_path:
         restore_vars:
     """
-    print("=> Restoring weights from checkpoint: {}".format(weights_path))
+    print("Info: Restoring weights from checkpoint: {}".format(weights_path))
     # Create and call an operation that reads the network weights from the checkpoint file
     weight_init_op = slim.assign_from_checkpoint_fn(weights_path, restore_vars)
     weight_init_op(session)
+    print("")

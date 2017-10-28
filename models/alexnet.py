@@ -11,6 +11,8 @@ from models.model import Model
 from preprocessing.imagenet.bgr import resize_crop
 from weight_loading.numpyfile import load_weights
 
+from helper.layer import fc, conv
+
 class AlexNet(Model):
     """
     AlexNet model definition for Tensorflow
@@ -42,37 +44,37 @@ class AlexNet(Model):
 
     def create(self):
         # 1st Layer: Conv (w ReLu) -> Pool -> Lrn
-        conv1 = self.conv(self.tensor, 11, 11, 96, 4, 4, padding='VALID', name='conv1')        
+        conv1 = conv(self.tensor, 11, 11, 96, 4, 4, padding='VALID', name='conv1', trainable=self.is_layer_trainable('conv1'))        
         norm1 = tf.nn.local_response_normalization(conv1, depth_radius=2, alpha=2e-05, beta=0.75, bias=1.0, name='norm1')
         pool1 = tf.nn.max_pool(norm1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID', name='pool1')
     
         # 2nd Layer: Conv (w ReLu) -> Pool -> Lrn with 2 groups
-        conv2 = self.conv(pool1, 5, 5, 256, 1, 1, groups=2, name='conv2')
+        conv2 = conv(pool1, 5, 5, 256, 1, 1, groups=2, name='conv2', trainable=self.is_layer_trainable('conv2'))
         norm2 = tf.nn.local_response_normalization(conv2, depth_radius=2,alpha=2e-05, beta=0.75, bias=1.0, name='norm2')
         pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID', name='pool2')
         
         # 3rd Layer: Conv (w ReLu)
-        conv3 = self.conv(pool2, 3, 3, 384, 1, 1, name='conv3')
+        conv3 = conv(pool2, 3, 3, 384, 1, 1, name='conv3', trainable=self.is_layer_trainable('conv3'))
         
         # 4th Layer: Conv (w ReLu) splitted into two groups
-        conv4 = self.conv(conv3, 3, 3, 384, 1, 1, groups=2, name='conv4')
+        conv4 = conv(conv3, 3, 3, 384, 1, 1, groups=2, name='conv4', trainable=self.is_layer_trainable('conv4'))
         
         # 5th Layer: Conv (w ReLu) -> Pool splitted into two groups
-        conv5 = self.conv(conv4, 3, 3, 256, 1, 1, groups=2, name='conv5')
+        conv5 = conv(conv4, 3, 3, 256, 1, 1, groups=2, name='conv5', trainable=self.is_layer_trainable('conv5'))
         pool5 = tf.nn.max_pool(conv5, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID', name='pool5')
         
         # 6th Layer: Flatten -> FC (w ReLu) -> Dropout
         pool5_out  = int(np.prod(pool5.get_shape()[1:])) # 6 * 6 * 256 = 9216
-        pool5_flat = tf.reshape(pool5, [-1, pool5_out]) # shape=(image count, 7, 7, 512) -> shape=(image count, 25088)
-        fc6        = self.fc(pool5_flat, pool5_out, 4096, name='fc6')
+        pool5_flat = tf.reshape(pool5, [-1, pool5_out]) # shape=(image count, 6, 6, 256) -> shape=(image count, 9216)
+        fc6        = fc(pool5_flat, 4096, name='fc6', trainable=self.is_layer_trainable('fc6'))
         dropout6   = tf.nn.dropout(fc6, self.keep_prob)
         
         # 7th Layer: FC (w ReLu) -> Dropout
-        fc7      = self.fc(dropout6, 4096, 4096, name='fc7')
+        fc7      = fc(dropout6, 4096, name='fc7', trainable=self.is_layer_trainable('fc7'))
         dropout7 = tf.nn.dropout(fc7, self.keep_prob)
     
         # 8th Layer: FC and return unscaled activations (for tf.nn.softmax_cross_entropy_with_logits)
-        fc8 = self.fc(dropout7, 4096, self.num_classes, relu=False, name='fc8')
+        fc8 = fc(dropout7, self.num_classes, relu=False, name='fc8', trainable=self.is_layer_trainable('fc8'))
 
         # add layers to the endpoints dict
         endpoints = OrderedDict()
@@ -84,10 +86,10 @@ class AlexNet(Model):
         endpoints['conv4'] = conv4
         endpoints['conv5'] = conv5
         endpoints['pool5'] = pool5
-        endpoints['pool5/flat'] = pool5_flat
-        endpoints['fc6'] = fc6
-        endpoints['fc7'] = fc7
-        endpoints['fc8'] = fc8
+        endpoints['pool5/flat'] = pool5_flat # 9216
+        endpoints['fc6'] = fc6 # 4096
+        endpoints['fc7'] = fc7 # 4096
+        endpoints['fc8'] = fc8 # number of classes
 
         return fc8, endpoints
 

@@ -53,16 +53,12 @@ def load_by_subfolder(root_dir, file_extensions, validation_ratio, skip_folder=[
         folder_path = os.path.join(root_dir, folder)
         if not os.path.isdir(folder_path) or folder in skip_folder:
             continue # skip files and skipped folders
-        
-        print('Looking for data in %s' %folder)
 
         paths = get_files_in_folder(folder_path, file_extensions, skip_folder, use_subfolder)
         if not paths:
-            print('=> No files found')
             continue # skip empty directories
 
-        print('=> Found %i entries' %len(paths))
-
+        total_count = len(paths)
         # split the list into traning and validation
         label = re.sub(r'[^a-z0-9]+', ' ', folder.lower())
         if (validation_ratio > 0):
@@ -72,9 +68,13 @@ def load_by_subfolder(root_dir, file_extensions, validation_ratio, skip_folder=[
             paths_sub = []
 
         # print infos
-        print('  => Training: %i' %len(paths))
-        print('  => Validation %i' %len(paths_sub))
-        print('  => Labeling them with: {} ({})'.format(label, len(labels)))
+        print('=> Label: {} ({}) [Files: {} Total, {} Training, {} Validation]'.format(
+            label,
+            len(labels),
+            total_count,
+            len(paths),
+            len(paths_sub)
+        ))
 
         # add entries to the result
         labels.append(label)
@@ -84,6 +84,7 @@ def load_by_subfolder(root_dir, file_extensions, validation_ratio, skip_folder=[
         validation_paths += paths_sub
         validation_labels += [label_index] * len(paths_sub)
 
+    print('')
     return {
         'labels': labels,
         'training_count': len(training_paths),

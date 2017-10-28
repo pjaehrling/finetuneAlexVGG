@@ -4,7 +4,6 @@
 #
 
 import math
-from datetime import datetime
 
 import tensorflow as tf
 from tensorflow.contrib.data import Dataset
@@ -17,18 +16,14 @@ class Retrainer(object):
     Retrain (Finetune) a given model on a new set of categories 
     """
 
-    def __init__(self, model_def, data, write_summary = False, summary_step = 1, summary_path = '', write_checkpoints = False):
+    def __init__(self, model_def, data, write_checkpoints = False):
         self.model_def = model_def
         self.data = data
         self.num_classes = len(data['labels'])
-
-        self.write_summary = write_summary
-        self.summary_step = summary_step
-        self.summary_path = summary_path
         self.write_checkpoints = write_checkpoints
 
     @staticmethod
-    def print_infos(train_vars, restore_vars, learning_rate, batch_size, keep_prob):
+    def print_infos(train_vars, restore_vars, learning_rate, batch_size, keep_prob, use_adam):
         """Print infos about the current run
 
         Args:
@@ -44,10 +39,12 @@ class Retrainer(object):
         print("=> Will train:")
         for var in train_vars:
             print("  => {}".format(var))
+        print("")
         print("=> Learningrate: %.4f" %learning_rate)
         print("=> Batchsize: %i" %batch_size)
         print("=> Dropout: %.4f" %(1.0 - keep_prob))
-        print("##################################")
+        print("=> Using Adam Optimizer: %r" %use_adam)
+        print("")
 
     def parse_data(self, path, label, is_training):
         """
@@ -72,7 +69,7 @@ class Retrainer(object):
             output_width=self.model_def.image_size,
             is_training=is_training
         )
-        return img_processed, one_hot
+        return img_processed, one_hot, path
 
     def parse_train_data(self, path, label):
         return self.parse_data(path, label, True)
@@ -103,7 +100,7 @@ class Retrainer(object):
 
     ############################################################################
     def run(self, finetune_layers, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, memory_usage = 1.0, 
-            device = '/gpu:0', show_misclassified = False, validate_on_each_epoch = False, save_ckpt_dir = '', init_ckpt_file = '', use_adam_optimizer=False):
+            device = '/gpu:0', save_ckpt_dir = '', init_ckpt_file = '', use_adam_optimizer=False):
         """
         Run a training on part of the model (retrain/finetune)
 
@@ -147,19 +144,13 @@ class Retrainer(object):
         # Get a list with all trainable variables and print infos for the current run
         retrain_vars = model.get_retrain_vars()
         restore_vars = model.get_restore_vars()
-        self.print_infos(retrain_vars, restore_vars, learning_rate, batch_size, keep_prob)
+        self.print_infos(retrain_vars, restore_vars, learning_rate, batch_size, keep_prob, use_adam_optimizer)
 
         # Add/Get the different operations to optimize (loss, train and validate)
         with tf.device(device):
             loss_op = ops.get_loss_op(final_op, ph_labels)
             train_op = ops.get_train_op(loss_op, learning_rate, retrain_vars, use_adam_optimizer)
-            accuracy_op, predicted_index_op = ops.get_validation_ops(final_op, ph_labels)
-
-        # Create operat
-        summary_op = None
-        writer = None
-        if self.write_summary:
-            summary_op, writer = ops.get_summary_writer_op(retrain_vars, loss_op, accuracy_op, self.summary_path)
+            accuracy_op, correct_prediction_op, predicted_index_op, true_index_op = ops.get_validation_ops(final_op, ph_labels)
 
         # Get the number of training/validation steps per epoch to get through all images
         batches_per_epoch_train = int(math.ceil(self.data['training_count'] / (batch_size + 0.0)))
@@ -173,53 +164,53 @@ class Retrainer(object):
             # Init all variables 
             sess.run(tf.global_variables_initializer())
             
-            # Add the model graph to TensorBoard and print infos
-            if self.write_summary: 
-                writer.add_graph(sess.graph)
-            
             # Load the pretrained variables or a saved checkpoint
             if init_ckpt_file:
                 saver.restore(sess, init_ckpt_file)
             else: 
                 model.load_initial_weights(sess)
-
+            
+            utils.print_output_header(self.data['training_count'], self.data['validation_count'])
             for epoch in range(epochs):
-                print("{} Epoch number: {}".format(datetime.now(), epoch + 1))
                 is_last_epoch = True if (epoch+1) == epochs else False
                 
-                utils.run_training(
+                train_loss, train_acc = utils.run_training(
                     sess,
                     train_op,
+                    loss_op,
+                    accuracy_op,
                     init_train_iterator_op,
                     get_next_batch_op,
                     ph_images,
                     ph_labels,
                     ph_keep_prob,
                     keep_prob,
-                    batches_per_epoch_train,
-                    epoch,
-                    self.write_summary,
-                    summary_op,
-                    writer,
-                    self.summary_step
+                    batches_per_epoch_train
                 )
 
-                if validate_on_each_epoch or is_last_epoch:
-                    utils.run_validation(
-                        sess,
-                        accuracy_op,
-                        predicted_index_op,
-                        init_val_iterator_op,
-                        get_next_batch_op,
-                        ph_images,
-                        ph_labels,
-                        ph_keep_prob,
-                        batches_per_epoch_val,
-                        batch_size,
-                        is_last_epoch,
-                        show_misclassified,
-                        self.data
-                    )
+                return_misclassified = is_last_epoch
+                test_loss, test_acc, misclassified = utils.run_validation(
+                    sess,
+                    loss_op,
+                    accuracy_op,
+                    correct_prediction_op,
+                    predicted_index_op,
+                    true_index_op,
+                    final_op,
+                    init_val_iterator_op,
+                    get_next_batch_op,
+                    ph_images,
+                    ph_labels,
+                    ph_keep_prob,
+                    batches_per_epoch_val,
+                    return_misclassified
+                )
+                
+                utils.print_output_epoch(epoch + 1, train_loss, train_acc, test_loss, test_acc)
+                
+                # show missclassified list on last epoch
+                if is_last_epoch:
+                    utils.print_misclassified(sess, misclassified, self.data['labels'])
 
                 # save session in a checkpoint file
                 if self.write_checkpoints or is_last_epoch:

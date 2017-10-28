@@ -4,13 +4,13 @@
 #
 
 import math
-from datetime import datetime
 
 import tensorflow as tf
 from tensorflow.contrib.data import Dataset
 
 import helper.ops as ops
 import helper.utils as utils
+# from helper.layer import fc
 
 class FeatureTrainer(object):
     """
@@ -23,7 +23,7 @@ class FeatureTrainer(object):
         self.write_checkpoints = write_checkpoints
 
     @staticmethod
-    def print_infos(train_vars, learning_rate, batch_size, keep_prob):
+    def print_infos(train_vars, learning_rate, batch_size, keep_prob, use_adam):
         """Print infos about the current run
 
         Args: 
@@ -35,10 +35,12 @@ class FeatureTrainer(object):
         print("=> Will train:")
         for var in train_vars:
             print("  => {}".format(var))
+        print("")
         print("=> Learningrate: %.4f" %learning_rate)
         print("=> Batchsize: %i" %batch_size)
         print("=> Dropout: %.4f" %(1.0 - keep_prob))
-        print("##################################")
+        print("=> Using Adam Optimizer: %r" %use_adam)
+        print("")
 
     def parse_data(self, path, label):
         """
@@ -58,7 +60,7 @@ class FeatureTrainer(object):
         feat_file = tf.read_file(path)
         feat_vals = tf.string_split([feat_file], '\n')
         feat_floats = tf.string_to_number(feat_vals.values, out_type=tf.float32)
-        return feat_floats, one_hot
+        return feat_floats, one_hot, path
     
     def create_dataset(self, is_training=True):
         """
@@ -90,14 +92,20 @@ class FeatureTrainer(object):
         while index < len(layer_inputs):
             index += 1
             is_last = True if (index == len(layer_inputs)) else False
-            num_outputs = self.num_classes if is_last else layer_inputs[index]
             
+            num_outputs = self.num_classes if is_last else layer_inputs[index]
+            activation  = None if is_last else tf.nn.relu
+
             # Add a new layer
             layer.append(
+                # my FullyConnected implementation:
+                # fc(layer[index-1], num_outputs, 'fc%i'%index, trainable=True, relu=(not is_last))
+
+                # TF fully_connected
                 tf.contrib.layers.fully_connected(         
                     inputs=layer[index-1],
                     num_outputs=num_outputs,
-                    # activation_fn=tf.nn.relu,
+                    activation_fn=activation,
                     # normalizer_fn=None,
                     # normalizer_params=None,
                     # weights_initializer=initializers.xavier_initializer(),
@@ -118,14 +126,11 @@ class FeatureTrainer(object):
         # https://www.tensorflow.org/api_docs/python/tf/layers/dense
         # https://stackoverflow.com/questions/44912297/are-tf-layers-dense-and-tf-contrib-layers-fully-connected-interchangeable
 
-        print(layer)
-        print(index)
-
         return ph_data, ph_labels, layer[index]
 
     ############################################################################
     def run(self, layer_inputs, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, memory_usage = 1.0, 
-            device = '/gpu:0', show_misclassified = False, validate_on_each_epoch = False, save_ckpt_dir = '', init_ckpt_file = '', use_adam_optimizer=False):
+            device = '/gpu:0', save_ckpt_dir = '', init_ckpt_file = '', use_adam_optimizer=False):
         """
         Run training 
 
@@ -162,18 +167,17 @@ class FeatureTrainer(object):
         
         # Get a list with all trainable variables and print infos for the current run
         train_vars = tf.trainable_variables()
-        self.print_infos(train_vars, learning_rate, batch_size, keep_prob)
+        self.print_infos(train_vars, learning_rate, batch_size, keep_prob, use_adam_optimizer)
 
         # Add/Get the different operations to optimize (loss, train and validate)
         with tf.device(device):
             loss_op = ops.get_loss_op(final_op, ph_labels)
             train_op = ops.get_train_op(loss_op, learning_rate, train_vars, use_adam_optimizer)
-            accuracy_op, predicted_index_op = ops.get_validation_ops(final_op, ph_labels)
+            accuracy_op, correct_prediction_op, predicted_index_op, true_index_op = ops.get_validation_ops(final_op, ph_labels)
 
         # Get the number of training/validation steps per epoch to get through all images
-        batches_per_epoch_train = int(math.floor(self.data['training_count'] / (batch_size + 0.0)))
-        batches_per_epoch_val   = int(math.floor(self.data['validation_count'] / (batch_size + 0.0)))
-        # TODO: For the leftover images, change shape of the placeholder and use them? (leftovers are not used atm)
+        batches_per_epoch_train = int(math.ceil(self.data['training_count'] / (batch_size + 0.0)))
+        batches_per_epoch_val   = int(math.ceil(self.data['validation_count'] / (batch_size + 0.0)))
 
         # Initialize a saver, create a session config and start a session
         saver = tf.train.Saver()
@@ -187,40 +191,47 @@ class FeatureTrainer(object):
             if init_ckpt_file:
                 saver.restore(sess, init_ckpt_file)
 
+            utils.print_output_header(self.data['training_count'], self.data['validation_count'])
             for epoch in range(epochs):
-                print("{} Epoch number: {}".format(datetime.now(), epoch + 1))
                 is_last_epoch = True if (epoch+1) == epochs else False
                 
-                utils.run_training(
+                train_loss, train_acc = utils.run_training(
                     sess,
                     train_op,
+                    loss_op,
+                    accuracy_op,
                     init_train_iterator_op,
                     get_next_batch_op,
                     ph_data,
                     ph_labels,
                     ph_keep_prob,
                     keep_prob,
-                    batches_per_epoch_train,
-                    epoch,
-                    False
+                    batches_per_epoch_train
+                )
+                
+                return_misclassified = is_last_epoch
+                test_loss, test_acc, misclassified = utils.run_validation(
+                    sess,
+                    loss_op,
+                    accuracy_op,
+                    correct_prediction_op,
+                    predicted_index_op,
+                    true_index_op,
+                    final_op,
+                    init_val_iterator_op,
+                    get_next_batch_op,
+                    ph_data,
+                    ph_labels,
+                    ph_keep_prob,
+                    batches_per_epoch_val,
+                    return_misclassified
                 )
 
-                if validate_on_each_epoch or is_last_epoch:
-                    utils.run_validation(
-                        sess,
-                        accuracy_op,
-                        predicted_index_op,
-                        init_val_iterator_op,
-                        get_next_batch_op,
-                        ph_data,
-                        ph_labels,
-                        ph_keep_prob,
-                        batches_per_epoch_val,
-                        batch_size,
-                        is_last_epoch,
-                        show_misclassified,
-                        self.data
-                    )
+                utils.print_output_epoch(epoch + 1, train_loss, train_acc, test_loss, test_acc)
+
+                # show missclassified list on last epoch
+                if is_last_epoch:
+                    utils.print_misclassified(sess, misclassified, self.data['labels'])
 
                 # save session in a checkpoint file
                 if self.write_checkpoints or is_last_epoch:

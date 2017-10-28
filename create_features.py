@@ -15,11 +15,9 @@ from helper.feature.creator import FeatureCreator
 # Input params
 USE_SUBFOLDER = True
 SKIP_FOLDER = ['yiwen']
+BATCH_SIZE = 32
 
-# Params
-FEAT_LAYER = 'fc6'
-
-def create(image_paths, model_def, feat_dir):
+def create(image_paths, model_def, layer, feat_dir):
     """
     Args:
         image_paths:
@@ -37,7 +35,8 @@ def create(image_paths, model_def, feat_dir):
         image_paths['labels']
     )
     creator.run(
-        FEAT_LAYER, 
+        layer, 
+        BATCH_SIZE,
         use_train_prep=False, 
         memory_usage=1.
     )
@@ -64,8 +63,15 @@ def main():
     parser.add_argument(
         '-model',
         type=str,
+        choices=['vgg', 'vgg_slim', 'inc_v3''alex'],
         default='alex',
-        help='Model to be validated'
+        help='Which model to use'
+    )
+    parser.add_argument(
+        '-layer',
+        type=str,
+        default='fc6',
+        help='Which layer to use as feature output'
     )
     parser.add_argument(
         '-feature_dir',
@@ -78,6 +84,7 @@ def main():
     image_dir = args.image_dir
     image_file = args.image_file
     model_str = args.model
+    layer = args.layer
     feature_dir = args.feature_dir
 
     # Load images
@@ -108,7 +115,7 @@ def main():
         model_def = AlexNet
 
     # Start retraining/finetuning
-    create(image_paths, model_def, feature_dir)
+    create(image_paths, model_def, layer, feature_dir)
 
 if __name__ == '__main__':
     main()

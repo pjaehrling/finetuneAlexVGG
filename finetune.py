@@ -29,15 +29,10 @@ FINETUNE_LAYERS = ['fc6', 'fc7', 'fc8']
 CHECKPOINT_DIR = '../checkpoints'
 
 # HARDWARE USAGE
-DEVICE = '/gpu:0'
+DEVICE = '/cpu:0'
 MEMORY_USAGE = 1.0
 
-# Tensorboard/Summary params
-WRITE_SUMMARY = False
-SUMMARY_STEP = 20 # How often to write the tf.summary
-SUMMARY_PATH = "../tensorboard"
-
-def finetune(model_def, data, show_misclassified, validate_on_each_epoch, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt, use_adam_optimizer):
+def finetune(model_def, data, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt, use_adam_optimizer):
     """
     Args:
         model_def:
@@ -48,7 +43,7 @@ def finetune(model_def, data, show_misclassified, validate_on_each_epoch, ckpt_d
         write_checkpoint_on_each_epoch:
         init_from_ckpt:
     """
-    trainer = Retrainer(model_def, data, WRITE_SUMMARY, SUMMARY_STEP, SUMMARY_PATH, write_checkpoint_on_each_epoch)
+    trainer = Retrainer(model_def, data, write_checkpoint_on_each_epoch)
     trainer.run(
         FINETUNE_LAYERS,
         NUM_EPOCHS,
@@ -57,8 +52,6 @@ def finetune(model_def, data, show_misclassified, validate_on_each_epoch, ckpt_d
         KEEP_PROB,
         MEMORY_USAGE,
         DEVICE,
-        show_misclassified,
-        validate_on_each_epoch,
         ckpt_dir,
         init_from_ckpt,
         use_adam_optimizer
@@ -83,18 +76,6 @@ def main():
         help='File with a list of trainings/validation images and their labels'
     )
     parser.add_argument(
-        '-show_misclassified',
-        default=False,
-        help='Show misclassified validateion images at the end',
-        action='store_true' # whenever this option is set, the arg is set to true
-    )
-    parser.add_argument(
-        '-validate_on_each_epoch',
-        default=False,
-        help='Validate the model in each epoch (default is just once at the end)',
-        action='store_true' # whenever this option is set, the arg is set to true
-    )
-    parser.add_argument(
         '-write_checkpoint_on_each_epoch',
         default=False,
         help='Write a checkpoint file on each epoch (default is just once at the end',
@@ -109,7 +90,7 @@ def main():
     parser.add_argument(
         '-model',
         type=str,
-        choices=['vgg', 'vgg_slim', 'inc_v3', 'alex'],
+        choices=['vgg', 'alex'],
         default='alex',
         help='Model to be validated. Default is AlexNet (alex)'
     )
@@ -123,8 +104,6 @@ def main():
     args = parser.parse_args()
     image_dir = args.image_dir
     image_file = args.image_file
-    show_misclassified = args.show_misclassified
-    validate_on_each_epoch = args.validate_on_each_epoch
     write_checkpoint_on_each_epoch = args.write_checkpoint_on_each_epoch
     init_from_ckpt = args.init_from_ckpt
     model_str = args.model
@@ -147,15 +126,6 @@ def main():
         else:
             data = data_provider.load_by_file(image_file, VALIDATION_RATIO)
 
-    # Make sure we have enough images to fill at least one training/validation batch
-    if data['training_count'] < BATCH_SIZE:
-        print('Not enough training images')
-        return None
-
-    if data['validation_count'] < BATCH_SIZE:
-        print('Not enough validation images')
-        return None
-
     # Set a CNN model definition
     if model_str == 'vgg':
         model_def = VGG
@@ -172,7 +142,7 @@ def main():
         os.makedirs(ckpt_dir)
 
     # Start retraining/finetuning
-    finetune(model_def, data, show_misclassified, validate_on_each_epoch, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt, use_adam_optimizer)
+    finetune(model_def, data, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt, use_adam_optimizer)
 
 if __name__ == '__main__':
     main()

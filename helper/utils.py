@@ -1,42 +1,73 @@
 import os
-from datetime import datetime  
+from datetime import datetime
+from random import randint  
+from tensorflow.python.ops.nn_ops import softmax
     
 def save_session_to_checkpoint_file(sess, saver, epoch, path):
     """
     """
-    checkpoint = os.path.join(path, 'model_epoch' + str(epoch+1) + '.ckpt')
+    checkpoint = os.path.join(path, datetime.now().strftime("%m%d_%H%M%S_") + 'model_epoch' + str(epoch+1) + '.ckpt')
     saver.save(sess, checkpoint)
-    print("{} Model checkpoint saved at {}".format(datetime.now(), checkpoint))
+    print("Model checkpoint saved at {}".format(checkpoint))
 
-def get_misclassified(batch_start_index, predictions, paths, labels):
+def get_misclassified(corr_pred, paths, pred_index, true_index, scores):
     """
     Returns: a list of tupels (path, predicted label, true label)
     """
     misclassified = []
-    for i in range(len(predictions)):
-        index = batch_start_index + i
-        if predictions[i] != labels[index]:
-            misclassified.append((paths[index], predictions[i], labels[index]))
+    for i, correct in enumerate(corr_pred):
+        if not correct:
+            misclassified.append((paths[i], pred_index[i], true_index[i], scores[i]))
 
     return misclassified
 
-def print_misclassified(misclassified, labels):
+def print_misclassified(sess, misclassified, labels):
     """
     """
-    print("=> Misclassified (%i)" %len(misclassified))
-    for _, (img_path, predicted_label, true_label) in enumerate(misclassified):
-        print("  => {} -> {} ({})".format(
-            img_path,
-            labels[predicted_label],
-            labels[true_label]
-        ))
+    print("----------------------------------------------------------------")
+    print("")
+    print("=> Misclassified: %i" %len(misclassified))
+    print("================================================================")
+    for (path, pred_index, true_index, score) in misclassified:
+        smax = sess.run(softmax(score))
 
-def run_training(sess, train_op, iterator_op, get_next_batch_op, ph_data, ph_labels, ph_keep_prob, 
-                keep_prob, batches, epoch, write_summary = False, summary_op = None, writer = None, disply_step = 1):
+        print("{} | {} ({}) | {}".format(
+            path,
+            labels[pred_index],
+            labels[true_index],
+            smax
+        ))
+    print("================================================================")
+
+def print_output_header(train_count, val_count):
+    """
+    """
+    print("=> Getting loss and accuracy for:")
+    print("  => {} training entries".format(train_count))
+    print("  => {} validation entries".format(val_count))
+    print("")
+    print(" Ep  |   Time   |   T Loss   |   V Loss   |  T Accu. |  V Accu.")
+    print("----------------------------------------------------------------")
+
+def print_output_epoch(epoch, train_loss, train_acc, test_loss, test_acc):
+    """
+    """
+    print("{:4.0f} | {} | {:.8f} | {:.8f} | {:.6f} | {:.6f}".format(
+        epoch,
+        datetime.now().strftime("%H:%M:%S"),
+        train_loss,
+        test_loss,
+        train_acc,
+        test_acc
+    ))
+
+def run_training(sess, train_op, loss_op, accuracy_op, iterator_op, get_next_batch_op, ph_data, ph_labels, ph_keep_prob, keep_prob, batches):
     """
     Args:
         sess:
+        loss_op,
         train_op:
+        accuracy_op:
         iterator_op:
         get_next_batch_op:
         ph_data:
@@ -44,29 +75,31 @@ def run_training(sess, train_op, iterator_op, get_next_batch_op, ph_data, ph_lab
         ph_keep_prob:
         keep_prob:
         batches:
-        epoch:
-        summary_op:
-        writer:
     """
-    print("{} Start training...".format(datetime.now()))
-    sess.run(iterator_op)
+    # Variables to keep track over different batches
+    acc = 0.
+    loss = 0.
+    # use_batch_for_crossvalidation = randint(0, batches - 2)
+    # -2 -> -1 = we start at index 0 / -1 we don't want to use the last batch, it might be smaller
 
+    sess.run(iterator_op)
     for batch_step in range(batches):
         # Get next batch of data and run the training operation
-        data_batch, label_batch = sess.run(get_next_batch_op)
-        sess.run(
-            train_op,
+        data_batch, label_batch, _ = sess.run(get_next_batch_op)
+        batch_loss, _, batch_acc = sess.run(
+            [loss_op, train_op, accuracy_op],
             feed_dict={ph_data: data_batch, ph_labels: label_batch, ph_keep_prob: keep_prob}
         )
+        loss += batch_loss
+        acc += batch_acc
 
-        if write_summary and batch_step % disply_step == 0:
-            # Generate summary with the current batch of data and write to file
-            summary = sess.run(summary_op, feed_dict={ph_data: data_batch, ph_labels: label_batch, ph_keep_prob: 1.})
-            writer.add_summary(summary, epoch * batches + batch_step)
+    acc /= batches
+    loss /= batches
+    return loss, acc
 
 
-def run_validation(sess, accuracy_op, predicted_index_op, iterator_op, get_next_batch_op, ph_data, ph_labels, ph_keep_prob,
-                    batches, batch_size, is_last, show_misclassified = False, data = {}):
+def run_validation(sess, loss_op, accuracy_op, correct_prediction_op, predicted_index_op, true_index_op, final_op,
+                   iterator_op, get_next_batch_op, ph_data, ph_labels, ph_keep_prob, batches, return_misclassified = False):
     """
     Args:
         sess:
@@ -78,43 +111,27 @@ def run_validation(sess, accuracy_op, predicted_index_op, iterator_op, get_next_
         ph_labels:
         ph_keep_prob:
         batches:
-        batch_size:
-        epoch:
-        is_last:
-        show_misclassified:
+        return_misclassified:
+        data
     """
     # Variables to keep track over different batches
-    test_acc = 0.
-    test_count = 0
+    acc = 0.
+    loss = 0.
     misclassified = []
 
-    print("{} Start validation...".format(datetime.now()))
     sess.run(iterator_op)
-
-    predicted = 0
-
-    for batch_step in range(batches):
-        img_batch, label_batch = sess.run(get_next_batch_op)
-        acc, predictions = sess.run(
-            [accuracy_op, predicted_index_op],
+    for _ in range(batches):
+        img_batch, label_batch, paths = sess.run(get_next_batch_op)
+        batch_loss, batch_acc, corr_pred, pred_index, true_index, scores = sess.run(
+            [loss_op, accuracy_op, correct_prediction_op, predicted_index_op, true_index_op, final_op],
             feed_dict={ph_data: img_batch, ph_labels: label_batch, ph_keep_prob: 1.}
         )
-        test_acc += acc
-        test_count += 1
-        predicted += len(predictions)
+        loss += batch_loss
+        acc += batch_acc
         
-        if is_last and show_misclassified:
-            start_index =  batch_step * batch_size
-            misclassified += get_misclassified(
-                start_index,
-                predictions,
-                data['validation_paths'],
-                data['validation_labels']
-            )
+        if return_misclassified:
+            misclassified += get_misclassified(corr_pred, paths, pred_index, true_index, scores)
     
-    # Calculate the overall validation accuracy
-    test_acc /= test_count
-    print("{} Validation Accuracy = {:.10f} ({})".format(datetime.now(), test_acc, predicted))
-
-    if is_last and show_misclassified:
-        print_misclassified(misclassified, data['labels'])
+    acc /= batches
+    loss /= batches
+    return loss, acc, misclassified

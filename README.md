@@ -40,6 +40,8 @@ python validate.py -model alex
 python validate.py -model [alex, vgg, vgg_slim, inc_v3]
 ```
 
+
+
 ### Run finetuning/retraining on selected layers
 ```
 python finetune.py -image_path /path/to/images -model alex
@@ -60,14 +62,6 @@ dog /path/to/dog1.jpg
 ```
 
 Other option:
-- `-show_misclassified`: Show misclassified images at the end of the last validation
-```
-python finetune.py ... -show_misclassified
-```
-- `-validate_on_each_epoch`: Validate the model in each epoch (default is just once at the end)
-```
-python finetune.py ... -validate_on_each_epoch
-```
 - `-write_checkpoint_on_each_epoch`: Save a checkpint on each epoch (default is just at the end)
 ```
 python finetune.py ... -write_checkpoint_on_each_epoch
@@ -77,8 +71,24 @@ Usually the initial weights are the pretrained imagenet weights (numpy-file or c
 ```
 python finetune.py ... -init_from_ckpt /path/to/file.ckpt
 ```
+- `-use_adam_optimizer`: Set this to use the AdamOptimizer for training. By default the GradientDescentOptimizer will be used.
+```
+python finetune.py ... -use_adam_optimizer
+```
 
-TensorFlows summaries are implemented so that TensorBoard can be used. (Activate it [here](https://github.com/pjaehrling/finetuneAlexVGG/blob/master/finetune.py#L36))
+### Create Features
+You can create features (activations at a given layer) and save them to the filesystem.
+The featues will be stored as `.txt` files. The filename is the MD5 hash for the filepath.
+In addidion a mapping file will be created.
+
+The `-image_path`/`-image_file` and `-model` parameter work the same way as they do for finetuning.
+In addition you need to provide the layer you want to use by adding `-layer` (e.g. `-layer fc6`) and 
+the location the features should be stored with `-feature_dir` (e.g. `-feature_dir /path/to/features`)
+```
+python create_features.py -image_path /path/to/images -model [alex, vgg] -layer fc6 -feature_dir /path/to/features
+...
+python create_features.py -image_file /path/to/images.txt -model [alex, vgg] -layer fc6 -feature_dir /path/to/features
+```
 
 # Useful sources:
 - https://kratzert.github.io/2017/02/24/finetuning-alexnet-with-tensorflow.html

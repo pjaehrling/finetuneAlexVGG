@@ -16,7 +16,7 @@ def get_validation_ops(scores, true_classes):
         true_index = tf.argmax(true_classes, 1)
         correct_pred = tf.equal(predicted_index, true_index)
         accuracy_op = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-    return accuracy_op, predicted_index
+    return accuracy_op, correct_pred, predicted_index, true_index
 
 
 def get_train_op(loss, learning_rate, train_vars, use_adam_optimizer=False):
@@ -45,7 +45,7 @@ def get_loss_op(scores, true_classes):
     """Inserts the operations which calculates the loss.
 
     Args:
-        scores: The new final node that produces results
+        scores: The final node that produces results
         true_classes: The node we feed the true classes in
     Returns: loss operation
     """
@@ -57,23 +57,6 @@ def get_loss_op(scores, true_classes):
         # --> computes the mean of elements across dimensions of a tensor (cross entropy values here)
         loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=scores, labels=true_classes))
     return loss_op
-
-
-def get_summary_writer_op(train_vars, loss, accuracy, path):
-    """
-    Args:
-        train_vars:
-        loss:
-        accuracy:
-    """
-    for var in train_vars:
-        tf.summary.histogram(var.name, var)
-
-    tf.summary.scalar('cross_entropy', loss)
-    tf.summary.scalar('accuracy', accuracy)
-    merged_summary = tf.summary.merge_all() # Merge all summaries together
-    writer = tf.summary.FileWriter(path) # Initialize and return the FileWriter
-    return merged_summary, writer
 
 
 def get_dataset_ops(data_train, data_val, batch_size, train_size, val_size, shuffle=True):
