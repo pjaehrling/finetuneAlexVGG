@@ -4,12 +4,6 @@ My AlexNet and VGG16 model implementations for Tensorflow, with a validation and
 Also includes wrapper model classes to use the Tensorflow Slim implementations of VGG16 and Inception V3 (finetune does not really work with those so far).
 Comes with Jupyter notebooks to test the different preprocessing scripts, run a classification and finetune a model using a notebook.
 
-ToDo: 
-- Store feature files (activations at a given layer) and train 1-n FullyConnected layer on these.
-- Shuffel the data/batches
-- Make Optimizer variable
-- Add Learning Rate Decay
-
 ## Requirements
 
 - Python 2.7 or 3
@@ -85,9 +79,10 @@ The `-image_path`/`-image_file` and `-model` parameter work the same way as they
 In addition you need to provide the layer you want to use by adding `-layer` (e.g. `-layer fc6`) and 
 the location the features should be stored with `-feature_dir` (e.g. `-feature_dir /path/to/features`)
 ```
-python create_features.py -image_path /path/to/images -model [alex, vgg] -layer fc6 -feature_dir /path/to/features
+python create_features.py -image_path /path/to/images -model vgg -layer fc6 -feature_dir /path/to/features
+python create_features.py -image_file /path/to/images.txt -model inc_v3 -layer PreLogits -feature_dir /path/to/features
 ...
-python create_features.py -image_file /path/to/images.txt -model [alex, vgg] -layer fc6 -feature_dir /path/to/features
+python create_features.py -image_path /path/to/images -model [alex, vgg, inc_v3] -layer layername -feature_dir /path/to/features
 ```
 
 # Useful sources:

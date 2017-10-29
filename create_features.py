@@ -63,7 +63,7 @@ def main():
     parser.add_argument(
         '-model',
         type=str,
-        choices=['vgg', 'vgg_slim', 'inc_v3''alex'],
+        choices=['vgg', 'vgg_slim', 'inc_v3', 'alex'],
         default='alex',
         help='Which model to use'
     )

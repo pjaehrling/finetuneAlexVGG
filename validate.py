@@ -15,6 +15,7 @@ from models.alexnet import AlexNet
 from models.vgg import VGG
 from models.vgg_slim import VGGslim
 from models.inception_v3 import InceptionV3
+from models.resnet_v2 import ResNetV2
 from helper.imagenet_classes import class_names
 
 from tensorflow.contrib.data import Dataset, Iterator
@@ -69,10 +70,15 @@ def validate(model_def):
         probs = sess.run(softmax)
 
         # sometime we have an offset
-        offset = len(class_names) - len(probs[0])
+        if model_def is ResNetV2:
+            offset = len(class_names) - len(probs[0][0][0])
+        else:    
+            offset = len(class_names) - len(probs[0])
         
         # print the results
         for prob in probs:
+            if model_def is ResNetV2:
+                prob = prob[0][0]
             best_index = np.argmax(prob)
             print "> " + class_names[best_index+offset] + " -> %.4f" %prob[best_index]
 
@@ -94,6 +100,8 @@ def main():
         model_def = VGGslim
     elif model_str == 'inc_v3':
         model_def = InceptionV3
+    elif model_str == 'res_v2':
+        model_def = ResNetV2
     elif model_str == 'alex': # default
         model_def = AlexNet
 

@@ -129,8 +129,8 @@ class FeatureCreator(object):
     def get_feature_tensor(endpoints, feat_layer):
         for key, tensor in endpoints.items():
             if key.endswith(feat_layer):
-                return tensor
-        return None
+                return key, tensor
+        return '', None
 
     def run(self, feat_layer, batch_size, use_train_prep=False, memory_usage=1.):
         """
@@ -153,8 +153,16 @@ class FeatureCreator(object):
         # Init the model and get all the endpoints
         model = self.model_def(ph_image)
         endpoints = model.get_endpoints()
-        feat_tensor = self.get_feature_tensor(endpoints, feat_layer)
-        print("=> Loading data from:")
+        name, feat_tensor = self.get_feature_tensor(endpoints, feat_layer)
+        
+        if feat_tensor is None:
+            print("=> Couldn't find matching layer. Available:")
+            for key, tensor in endpoints.items():
+                print("  => " + key)
+                print(tensor)
+            return
+
+        print("=> Loading data from layer: %s" %name)
         print(feat_tensor)
 
         config = tf.ConfigProto()
