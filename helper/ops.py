@@ -51,10 +51,15 @@ def get_loss_op(scores, true_classes):
     """
     # Op for calculating the loss
     with tf.name_scope("cross_entropy"):
+        # sm = tf.nn.softmax(scores)
+        # total_loss = true_classes * tf.log(sm)
+        # loss = -(tf.reduce_mean(total_loss))
+        #
         # softmax_cross_entropy_with_logits 
         # --> calculates the cross entropy between the softmax score (probaility) and hot encoded class expectation (all "0" except one "1") 
         # reduce_mean 
         # --> computes the mean of elements across dimensions of a tensor (cross entropy values here)
+        #
         loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=scores, labels=true_classes))
     return loss_op
 

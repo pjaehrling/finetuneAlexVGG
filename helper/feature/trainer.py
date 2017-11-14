@@ -79,7 +79,7 @@ class FeatureTrainer(object):
         dataset = dataset.map(self.parse_data)
         return dataset
 
-    def create_model(self, layer_inputs):
+    def create_model(self, layer_inputs, keep_prob):
         """
         build model ...
         """
@@ -87,23 +87,21 @@ class FeatureTrainer(object):
         ph_labels = tf.placeholder(tf.float32, [None, self.num_classes])
         
         layer = [ph_data]
-        index = 0
+        added = 0
 
-        while index < len(layer_inputs):
-            index += 1
-            is_last = True if (index == len(layer_inputs)) else False
+        while added < len(layer_inputs):
+            added += 1
+            is_last = True if (added == len(layer_inputs)) else False
             
-            num_outputs = self.num_classes if is_last else layer_inputs[index]
-            activation  = None if is_last else tf.nn.relu
+            # last layer output is defined by subfolder count (or classes in list of files)
+            num_outputs = self.num_classes if is_last else layer_inputs[added]
+            # no activation on last FC
+            activation  = None if is_last else tf.nn.relu 
 
             # Add a new layer
             layer.append(
-                # my FullyConnected implementation:
-                # fc(layer[index-1], num_outputs, 'fc%i'%index, trainable=True, relu=(not is_last))
-
-                # TF fully_connected
                 tf.contrib.layers.fully_connected(         
-                    inputs=layer[index-1],
+                    inputs=layer[len(layer) - 1],
                     num_outputs=num_outputs,
                     activation_fn=activation,
                     # normalizer_fn=None,
@@ -116,9 +114,12 @@ class FeatureTrainer(object):
                     # variables_collections=None,
                     # outputs_collections=None,
                     trainable=True,
-                    scope='fc%i' % index
+                    scope='fc%i' % added
                 )
             )
+
+            if not is_last: # no dropout on last FC
+                tf.nn.dropout(layer[len(layer) - 1], keep_prob)
 
         # fc7 = tf.layers.dense(ph, 1024, name='fc7')
         # tf.layers.dense() does the same basically, but has a linear activation by default, both just higher api level functions
@@ -126,7 +127,7 @@ class FeatureTrainer(object):
         # https://www.tensorflow.org/api_docs/python/tf/layers/dense
         # https://stackoverflow.com/questions/44912297/are-tf-layers-dense-and-tf-contrib-layers-fully-connected-interchangeable
 
-        return ph_data, ph_labels, layer[index]
+        return ph_data, ph_labels, layer[added]
 
     ############################################################################
     def run(self, layer_inputs, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, memory_usage = 1.0, 
@@ -163,7 +164,7 @@ class FeatureTrainer(object):
         # Initialize model and create input placeholders
         with tf.device(device):
             ph_keep_prob = tf.placeholder(tf.float32)
-            ph_data, ph_labels, final_op = self.create_model(layer_inputs)
+            ph_data, ph_labels, final_op = self.create_model(layer_inputs, keep_prob)
         
         # Get a list with all trainable variables and print infos for the current run
         train_vars = tf.trainable_variables()

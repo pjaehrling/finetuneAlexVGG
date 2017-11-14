@@ -2,7 +2,7 @@
 # Author: Philipp Jaehrling philipp.jaehrling@gmail.com)
 #
 from models.model import Model
-from preprocessing import inception as inception_prepocessing
+from preprocessing.inception import resize_crop as inc_rc_prepocessing
 # from preprocessing.imagenet.bgr import resize_crop
 from weight_loading.checkpoint import load_weights
 
@@ -18,20 +18,32 @@ class ResNetV2(Model):
     All the "fully connected" layers have been transformed to "conv2d" layers in this implementation.
     """
     image_size = resnet_v2.default_image_size
-    image_prep = inception_prepocessing
+    image_prep = inc_rc_prepocessing
 
     def __init__(self, tensor, keep_prob=1.0, num_classes=1001, retrain_layer=[], weights_path='./weights/resnet_v2_101.ckpt'):
         # Call the parent class
         Model.__init__(self, tensor, keep_prob, num_classes, retrain_layer, weights_path)
-
-        # TODO This implementation has a problem while validation (is still set to training)
+        
+        # Create the Graph
         is_training = True if retrain_layer else False
         with slim.arg_scope(resnet_arg_scope()):
             self.final, self.endpoints = resnet_v2_101(
                 self.tensor,
                 num_classes=num_classes,
-                is_training=is_training
+                is_training=is_training,
+                global_pool=True # True: both height_out and width_out equal one
             )
+            # The result is different then with other tfSlim models, see code comment:
+            #
+            #  net: A rank-4 tensor of size [batch, height_out, width_out, channels_out].
+            #       If global_pool is False, then height_out and width_out are reduced by a factor of output_stride compared to 
+            #       the respective height_in and width_in, else both height_out and width_out equal one. 
+            #
+            #       If num_classes is None, then net is the output of the last ResNet block, potentially after global average pooling. 
+            #       If num_classes is not None, net contains the PRE-softmax activations.
+            #
+            #  end_points: A dictionary from components of the network to the corresponding activation.
+            #
 
     def get_final_op(self):
         return self.final

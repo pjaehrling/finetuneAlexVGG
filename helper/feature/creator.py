@@ -13,8 +13,9 @@ class FeatureCreator(object):
     """
     """
 
-    def __init__(self, model_def, feature_dir, image_paths, image_labels, label_dict):
+    def __init__(self, model_def, feature_dir, image_paths, image_labels, label_dict, is_resnet=False):
         self.model_def = model_def
+        self.is_resnet = is_resnet
 
         # Create a list with feature paths (image -> feat)
         self.image_paths = []
@@ -150,18 +151,27 @@ class FeatureCreator(object):
         # Initialize model and create input placeholders
         ph_image = tf.placeholder(tf.float32, [None, self.model_def.image_size, self.model_def.image_size, 3])
 
-        # Init the model and get all the endpoints
-        model = self.model_def(ph_image)
-        endpoints = model.get_endpoints()
-        name, feat_tensor = self.get_feature_tensor(endpoints, feat_layer)
+        if self.is_resnet:
+            # Init ResNet and get the final output (which is not part of the endpoints dict)
+            # -> when "num_classes=None" we get the last Residential block aka convolution (after global average pooling) output
+            model = self.model_def(ph_image, num_classes=None) 
+            feat_tensor = model.get_final_op()
+            name = 'average pooling'
+        else:
+            # Init the model and get all the endpoints
+            model = self.model_def(ph_image)
         
-        if feat_tensor is None:
-            print("=> Couldn't find matching layer. Available:")
-            for key, tensor in endpoints.items():
-                print("  => " + key)
-                print(tensor)
-            return
+            endpoints = model.get_endpoints()
+            name, feat_tensor = self.get_feature_tensor(endpoints, feat_layer)
+        
+            if feat_tensor is None:
+                print("=> Couldn't find matching layer. Available:")
+                for key, tensor in endpoints.items():
+                    print("  => " + key)
+                    print(tensor)
+                return
 
+        # Go on the same way for ResNet and all others
         print("=> Loading data from layer: %s" %name)
         print(feat_tensor)
 

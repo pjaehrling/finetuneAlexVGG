@@ -13,12 +13,12 @@ USE_SUBFOLDER = True
 SKIP_FOLDER = ['yiwen']
 
 # Learning params
-LEARNING_RATE = 0.005
-NUM_EPOCHS = 10
+LEARNING_RATE = 0.001
+NUM_EPOCHS = 20
 BATCH_SIZE = 32
 
 # Network params
-KEEP_PROB = 1.0 # [0.5]
+KEEP_PROB = 0.5 # [0.5]
 CHECKPOINT_DIR = '../checkpoints/features'
 
 # HARDWARE USAGE

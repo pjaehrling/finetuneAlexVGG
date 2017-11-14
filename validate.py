@@ -20,6 +20,12 @@ from helper.imagenet_classes import class_names
 
 from tensorflow.contrib.data import Dataset, Iterator
 
+def prep_resnet_results(probs):
+    """
+    For ResNet the result is a rank-4 tensor of size [images, 1, 1, num_classes].
+    """
+    return [prob[0][0] for prob in probs]
+
 def validate(model_def):
     """
     Validate my alexnet implementation
@@ -69,16 +75,14 @@ def validate(model_def):
         # run the graph
         probs = sess.run(softmax)
 
-        # sometime we have an offset
         if model_def is ResNetV2:
-            offset = len(class_names) - len(probs[0][0][0])
-        else:    
-            offset = len(class_names) - len(probs[0])
+            probs = prep_resnet_results(probs)
+
+        # sometime we have an offset
+        offset = len(class_names) - len(probs[0])
         
         # print the results
         for prob in probs:
-            if model_def is ResNetV2:
-                prob = prob[0][0]
             best_index = np.argmax(prob)
             print "> " + class_names[best_index+offset] + " -> %.4f" %prob[best_index]
 

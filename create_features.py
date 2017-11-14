@@ -10,6 +10,7 @@ from models.alexnet import AlexNet
 from models.vgg import VGG
 from models.vgg_slim import VGGslim
 from models.inception_v3 import InceptionV3
+from models.resnet_v2 import ResNetV2
 from helper.feature.creator import FeatureCreator
 
 # Input params
@@ -17,7 +18,7 @@ USE_SUBFOLDER = True
 SKIP_FOLDER = ['yiwen']
 BATCH_SIZE = 32
 
-def create(image_paths, model_def, layer, feat_dir):
+def create(image_paths, model_def, layer, feat_dir, is_resnet):
     """
     Args:
         image_paths:
@@ -32,7 +33,8 @@ def create(image_paths, model_def, layer, feat_dir):
         feat_dir,
         image_paths['training_paths'],
         image_paths['training_labels'],
-        image_paths['labels']
+        image_paths['labels'],
+        is_resnet
     )
     creator.run(
         layer, 
@@ -63,7 +65,7 @@ def main():
     parser.add_argument(
         '-model',
         type=str,
-        choices=['vgg', 'vgg_slim', 'inc_v3', 'alex'],
+        choices=['vgg', 'vgg_slim', 'inc_v3', 'res_v2', 'alex'],
         default='alex',
         help='Which model to use'
     )
@@ -105,17 +107,22 @@ def main():
             image_paths = data_provider.load_by_file(image_file, 0)
 
     # Set a CNN model definition
+    is_resnet = False
+
     if model_str == 'vgg':
         model_def = VGG
     elif model_str == 'vgg_slim':
         model_def = VGGslim
     elif model_str == 'inc_v3':
         model_def = InceptionV3
+    elif model_str == 'res_v2':
+        model_def = ResNetV2
+        is_resnet = True
     elif model_str == 'alex': # default
         model_def = AlexNet
 
     # Start retraining/finetuning
-    create(image_paths, model_def, layer, feature_dir)
+    create(image_paths, model_def, layer, feature_dir, is_resnet)
 
 if __name__ == '__main__':
     main()
