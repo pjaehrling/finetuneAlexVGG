@@ -1,13 +1,15 @@
 #
 # Author: Philipp Jaehrling philipp.jaehrling@gmail.com)
 #
+from preprocessing import resize_crop
+
 class Model(object):
     """
     Parent class for multiple CNN model classes
     """
     # These params should be filled for each model
     image_size = 0
-    image_prep = False
+    image_prep = resize_crop
 
     def __init__(self, tensor, keep_prob, num_classes, retrain_layer, weights_path):
         """

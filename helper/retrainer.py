@@ -16,10 +16,11 @@ class Retrainer(object):
     Retrain (Finetune) a given model on a new set of categories 
     """
 
-    def __init__(self, model_def, data, write_checkpoints = False):
+    def __init__(self, model_def, data, image_prep=None, write_checkpoints = False):
         self.model_def = model_def
         self.data = data
         self.num_classes = len(data['labels'])
+        self.image_prep = image_prep if image_prep else model_def.image_prep # overwrite the default model image prep?
         self.write_checkpoints = write_checkpoints
 
     @staticmethod
@@ -63,7 +64,7 @@ class Retrainer(object):
         # load the image
         img_file      = tf.read_file(path)
         img_decoded   = tf.image.decode_jpeg(img_file, channels=3)
-        img_processed = self.model_def.image_prep.preprocess_image(
+        img_processed = self.image_prep.preprocess_image(
             image=img_decoded,
             output_height=self.model_def.image_size,
             output_width=self.model_def.image_size,

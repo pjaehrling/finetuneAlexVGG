@@ -26,9 +26,34 @@ def load_images_by_subfolder(root_dir, validation_ratio, skip_folder=[], use_sub
     file_extensions =  ['jpg'] # ['jpg', 'jpeg']
     return load_by_subfolder(root_dir, file_extensions, validation_ratio, skip_folder, use_subfolder)
 
-def load_features_by_subfolder(root_dir, validation_ratio, skip_folder=[], use_subfolder=False):
+def load_features_by_subfolder(root_dir, validation_ratio, skip_folder=[], use_subfolder=False, train_dirs = []):
     file_extensions =  ['txt']
-    return load_by_subfolder(root_dir, file_extensions, validation_ratio, skip_folder, use_subfolder)
+    shared = load_by_subfolder(root_dir, file_extensions, validation_ratio, skip_folder, use_subfolder)
+    
+    # ####################
+    # This will add extra training data, in case more training directories are provided.
+    # 
+    # Depending on the filename (which should be *md5hash*.txt), 
+    # it will try to make sure, that no validation feature is used for training
+    # ###################
+    if train_dirs:
+        validation_files = [os.path.basename(p) for p in shared['validation_paths']] 
+        for train_dir in train_dirs:
+            print('=> Adding trainingdata from: {}'.format(train_dir))
+            train_only = load_by_subfolder(train_dir, file_extensions, 0, skip_folder, use_subfolder)
+            # Make sure both have the same labels and the same label order
+            if train_only['labels'] == shared['labels']:
+                for i in range(train_only['training_count']):
+                    # Filter features that are already in the validation group
+                    if os.path.basename(train_only['training_paths'][i]) not in validation_files:
+                        shared['training_paths'].append(train_only['training_paths'][i])
+                        shared['training_labels'].append(train_only['training_labels'][i])
+                        shared['training_count'] += 1
+
+        print('=> Final dataset: {} Training, {} Validation'.format(shared['training_count'], shared['validation_count']))
+        print('')
+
+    return shared
 
 def load_by_subfolder(root_dir, file_extensions, validation_ratio, skip_folder=[], use_subfolder=False):
     """

@@ -86,8 +86,8 @@ def run_training(sess, train_op, loss_op, accuracy_op, iterator_op, get_next_bat
     for batch_step in range(batches):
         # Get next batch of data and run the training operation
         data_batch, label_batch, _ = sess.run(get_next_batch_op)
-        batch_loss, _, batch_acc = sess.run(
-            [loss_op, train_op, accuracy_op],
+        _, batch_loss, batch_acc = sess.run(
+            [train_op, loss_op, accuracy_op],
             feed_dict={ph_data: data_batch, ph_labels: label_batch, ph_keep_prob: keep_prob}
         )
         loss += batch_loss
@@ -122,8 +122,8 @@ def run_validation(sess, loss_op, accuracy_op, correct_prediction_op, predicted_
     sess.run(iterator_op)
     for _ in range(batches):
         img_batch, label_batch, paths = sess.run(get_next_batch_op)
-        batch_loss, batch_acc, corr_pred, pred_index, true_index, scores = sess.run(
-            [loss_op, accuracy_op, correct_prediction_op, predicted_index_op, true_index_op, final_op],
+        scores, batch_loss, batch_acc, corr_pred, pred_index, true_index = sess.run(
+            [final_op, loss_op, accuracy_op, correct_prediction_op, predicted_index_op, true_index_op],
             feed_dict={ph_data: img_batch, ph_labels: label_batch, ph_keep_prob: 1.}
         )
         loss += batch_loss

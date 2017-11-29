@@ -2,7 +2,7 @@
 # Author: Philipp Jaehrling philipp.jaehrling@gmail.com)
 #
 from models.model import Model
-from preprocessing import inception as inception_prepocessing
+from preprocessing.inception import resize_crop as inc_rc_prepocessing
 from weight_loading.checkpoint import load_weights
 
 import tensorflow.contrib.slim as slim
@@ -16,7 +16,7 @@ class InceptionV3(Model):
     All the "fully connected" layers have been transformed to "conv2d" layers in this implementation.
     """
     image_size = inception_v3.default_image_size
-    image_prep = inception_prepocessing
+    image_prep = inc_rc_prepocessing
 
     def __init__(self, tensor, keep_prob=1.0, num_classes=1001, retrain_layer=[], weights_path='./weights/inception_v3.ckpt'):
         # Call the parent class

@@ -106,7 +106,7 @@ def main():
         model_def = InceptionV3
     elif model_str == 'res_v2':
         model_def = ResNetV2
-    elif model_str == 'alex': # default
+    else: # default
         model_def = AlexNet
 
     validate(model_def)

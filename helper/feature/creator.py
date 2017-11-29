@@ -13,9 +13,10 @@ class FeatureCreator(object):
     """
     """
 
-    def __init__(self, model_def, feature_dir, image_paths, image_labels, label_dict, is_resnet=False):
+    def __init__(self, model_def, feature_dir, image_paths, image_labels, label_dict, image_prep=None, is_resnet=False):
         self.model_def = model_def
         self.is_resnet = is_resnet
+        self.image_prep = image_prep if image_prep else model_def.image_prep # overwrite the default model image prep? 
 
         # Create a list with feature paths (image -> feat)
         self.image_paths = []
@@ -76,7 +77,7 @@ class FeatureCreator(object):
         # load the image
         img_file      = tf.read_file(img_path)
         img_decoded   = tf.image.decode_jpeg(img_file, channels=3)
-        img_processed = self.model_def.image_prep.preprocess_image(
+        img_processed = self.image_prep.preprocess_image(
             image=img_decoded,
             output_height=self.model_def.image_size,
             output_width=self.model_def.image_size,

@@ -29,7 +29,7 @@ FINETUNE_LAYERS = ['fc6', 'fc7', 'fc8']
 CHECKPOINT_DIR = '../checkpoints'
 
 # HARDWARE USAGE
-DEVICE = '/cpu:0'
+DEVICE = '/gpu:0'
 MEMORY_USAGE = 1.0
 
 def finetune(model_def, data, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt, use_adam_optimizer):

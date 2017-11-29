@@ -3,7 +3,6 @@
 #
 from models.model import Model
 from preprocessing.inception import resize_crop as inc_rc_prepocessing
-# from preprocessing.imagenet.bgr import resize_crop
 from weight_loading.checkpoint import load_weights
 
 import tensorflow.contrib.slim as slim

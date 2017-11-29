@@ -6,6 +6,7 @@
 import math
 
 import tensorflow as tf
+import tensorflow.contrib.slim as slim
 from tensorflow.contrib.data import Dataset
 
 import helper.ops as ops
@@ -79,7 +80,7 @@ class FeatureTrainer(object):
         dataset = dataset.map(self.parse_data)
         return dataset
 
-    def create_model(self, layer_inputs, keep_prob):
+    def create_model(self, layer_inputs, keep_prob, use_regularizer=False):
         """
         build model ...
         """
@@ -88,6 +89,8 @@ class FeatureTrainer(object):
         
         layer = [ph_data]
         added = 0
+
+        weights_regularizer = slim.l2_regularizer(0.001) if use_regularizer else None
 
         while added < len(layer_inputs):
             added += 1
@@ -107,7 +110,7 @@ class FeatureTrainer(object):
                     # normalizer_fn=None,
                     # normalizer_params=None,
                     # weights_initializer=initializers.xavier_initializer(),
-                    # weights_regularizer=None,
+                    weights_regularizer=weights_regularizer,
                     # biases_initializer=tf.zeros_initializer(),
                     # biases_regularizer=None,
                     # reuse=None,
@@ -131,7 +134,7 @@ class FeatureTrainer(object):
 
     ############################################################################
     def run(self, layer_inputs, epochs, learning_rate = 0.01, batch_size = 128, keep_prob = 1.0, memory_usage = 1.0, 
-            device = '/gpu:0', save_ckpt_dir = '', init_ckpt_file = '', use_adam_optimizer=False):
+            device = '/gpu:0', save_ckpt_dir = '', init_ckpt_file = '', use_adam_optimizer=False, shuffle=True, use_regularizer=False):
         """
         Run training 
 
@@ -158,13 +161,13 @@ class FeatureTrainer(object):
             batch_size,
             train_size=self.data['training_count'],
             val_size=self.data['validation_count'],
-            shuffle=True
+            shuffle=shuffle
         )
 
         # Initialize model and create input placeholders
         with tf.device(device):
             ph_keep_prob = tf.placeholder(tf.float32)
-            ph_data, ph_labels, final_op = self.create_model(layer_inputs, keep_prob)
+            ph_data, ph_labels, final_op = self.create_model(layer_inputs, keep_prob, use_regularizer)
         
         # Get a list with all trainable variables and print infos for the current run
         train_vars = tf.trainable_variables()
@@ -182,9 +185,13 @@ class FeatureTrainer(object):
 
         # Initialize a saver, create a session config and start a session
         saver = tf.train.Saver()
-        config = tf.ConfigProto()
-        config.gpu_options.per_process_gpu_memory_fraction = memory_usage
-        with tf.Session(config=config) as sess:
+        gpu_options = tf.GPUOptions()
+        gpu_options.per_process_gpu_memory_fraction = memory_usage
+        gpu_options.visible_device_list="1"
+        config = tf.ConfigProto(gpu_options=gpu_options)
+        server = tf.train.Server.create_local_server(config=config)
+        
+        with tf.Session(target=server.target) as sess:
             # Init all variables 
             sess.run(tf.global_variables_initializer())
             

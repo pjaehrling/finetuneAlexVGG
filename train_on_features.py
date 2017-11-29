@@ -22,7 +22,7 @@ KEEP_PROB = 0.5 # [0.5]
 CHECKPOINT_DIR = '../checkpoints/features'
 
 # HARDWARE USAGE
-DEVICE = '/cpu:0'
+DEVICE = '/gpu:0'
 MEMORY_USAGE = 1.0
 
 def train(data, layer_inputs, ckpt_dir, write_checkpoint_on_each_epoch, init_from_ckpt, use_adam_optimizer):
@@ -50,7 +50,9 @@ def train(data, layer_inputs, ckpt_dir, write_checkpoint_on_each_epoch, init_fro
         DEVICE,
         ckpt_dir,
         init_from_ckpt,
-        use_adam_optimizer
+        use_adam_optimizer,
+        shuffle=True,
+        use_regularizer=True
     )
 
 def main():
